@@ -1,0 +1,1360 @@
+---
+title: "tj-data-prep"
+author: "Francisca Castro"
+date: "2022-11-22"
+output: html_document
+---
+
+# Packages Installation
+
+```{r message=FALSE, warning=FALSE}
+pacman::p_load(readxl, tidyverse, dplyr, readr, BBmisc, xlsx, haven,
+               formattable, writexl, countrycode, panelView, countrycode, magrittr)
+```
+
+# Data preparation
+
+## Afrobarometer
+
+Extract variables of interest and form a new dataframe
+
+### Wave 1
+
+```{r}
+afrobarometer_w1 <- read_sav("~/Documents/PhD/1_Research/transitional-justice/tj-corruption-project/data/afro-barometer/AFB_Merged_R1.sav")
+
+afrobarometer_w1$country <- as.numeric(afrobarometer_w1$country)
+afrobarometer_w1 %<>%
+  mutate(country = recode(country,
+                          "1" = "Botswana",
+                          "2" = "Ghana",
+                          "3" = "Lesotho",
+                          "4" = "Malawi",
+                          "5" = "Mali",
+                          "6" = "Namibia",
+                          "7" = "Nigeria",
+                          "8" = "South Africa",
+                          "9" = "Tanzania",
+                          "10" = "Uganda",
+                          "11" = "Zambia",
+                          "12" = "Zimbabwe"))
+table(afrobarometer_w1$country)
+
+afrobarometer_w1$year <- 0
+afrobarometer_w1$year[afrobarometer_w1$country == "Botswana"] <- "1999"
+afrobarometer_w1$year[afrobarometer_w1$country == "Ghana"] <- "1999"
+afrobarometer_w1$year[afrobarometer_w1$country == "Lesotho"] <- "2000"
+afrobarometer_w1$year[afrobarometer_w1$country == "Malawi"] <- "1999"
+afrobarometer_w1$year[afrobarometer_w1$country == "Mali"] <- "2001"
+afrobarometer_w1$year[afrobarometer_w1$country == "Namibia"] <- "1999"
+afrobarometer_w1$year[afrobarometer_w1$country == "Nigeria"] <- "1999"
+afrobarometer_w1$year[afrobarometer_w1$country == "South Africa"] <- "2000"
+afrobarometer_w1$year[afrobarometer_w1$country == "Tanzania"] <- "2001"
+afrobarometer_w1$year[afrobarometer_w1$country ==  "Uganda"] <- "2000"
+afrobarometer_w1$year[afrobarometer_w1$country ==  "Zambia"] <- "1999"
+afrobarometer_w1$year[afrobarometer_w1$country ==  "Zimbabwe"] <- "1999"
+
+afrobarometer_w1$survey <- 'afrobarometer_w1'
+
+afrobarometer_w1 %<>%
+  mutate(fight_corr = case_when(pfpcr1 == 4 ~ 1,
+                                pfpcr1 == 3 ~ 2,
+                                pfpcr1 == 2 ~ 3,
+                                pfpcr1 == 1 ~ 4),
+         corr_leaders = case_when(pfpcr3 == 4 ~ 1,
+                                  pfpcr3 == 3 ~ 2,
+                                  pfpcr3 == 2 ~ 3,
+                                  pfpcr3 == 1 ~ 4)) %>%
+  purrr::modify_at(c("fight_corr", "corr_leaders"), factor) %>%
+  select(country, year, fight_corr, corr_leaders, survey) 
+```
+
+### Wave 2
+
+```{r}
+afrobarometer_w2 <- read_sav("~/Documents/PhD/1_Research/transitional-justice/tj-corruption-project/data/afro-barometer/AFB_Merged_R2.sav")
+
+afrobarometer_w2$year <- format(as.Date(afrobarometer_w2$dateintr, format="%Y-%m-%d"),"%Y")
+class(afrobarometer_w2$year)
+afrobarometer_w2$year <- as.numeric(afrobarometer_w2$year)
+
+afrobarometer_w2$survey <- 'afrobarometer_w2'
+
+afrobarometer_w2$country <- as.numeric(afrobarometer_w2$country)
+afrobarometer_w2 %<>%
+  mutate(country = recode(country,
+                          "1" = "Botswana",
+                          "2" = "Ghana",
+                          "3" = "Lesotho",
+                          "4" = "Malawi",
+                          "5" = "Mali",
+                          "6" = "Namibia",
+                          "7" = "Nigeria",
+                          "8" = "South Africa",
+                          "9" = "Tanzania",
+                          "10" = "Uganda",
+                          "11" = "Zambia",
+                          "12" = "Zimbabwe",
+                          "13" = "Cape Verde",
+                          "14" = "Kenya",
+                          "15" = "Mozambique",
+                          "16" = "Senegal"))
+table(afrobarometer_w2$country)
+
+afrobarometer_w2$year[afrobarometer_w2$country ==  "Senegal"] <- "2002"
+
+afrobarometer_w2 %<>%
+  mutate(corr_pres = case_when(q51a == 0 ~ 1, #none
+                               q51a == 1 ~ 2,
+                               q51a == 2 ~ 3,
+                               q51a == 3 ~ 4), #all of them
+         corr_gov = case_when(q51c == 0 ~ 1, #none
+                              q51c == 1 ~ 2,
+                              q51c == 2 ~ 3,
+                              q51c == 3 ~ 4), #all of them
+         corr_jud = case_when(q51f == 0 ~ 1, #none
+                              q51f == 1 ~ 2,
+                              q51f == 2 ~ 3,
+                              q51f == 3 ~ 4), #all of them
+         fight_corr = case_when(q45j == 1 ~ 1, #1 very badly
+                                q45j == 2 ~ 2,
+                                q45j == 3 ~ 3,
+                                q45j == 4 ~ 4), #4 very well
+         corr_leaders = case_when(q51b == 0 ~ 1, #none of them
+                                  q51b == 1 ~ 2,
+                                  q51b == 2 ~ 3,
+                                  q51b == 3 ~ 4)) %>% # all of them
+  purrr::modify_at(c('corr_pres', 'corr_gov', 'corr_jud', "fight_corr", 
+                     "corr_leaders"), factor) %>%
+  select(country, year, corr_pres, corr_gov, corr_jud, fight_corr, corr_leaders, survey) 
+
+```
+
+### Wave 3
+
+```{r}
+afrobarometer_w3 <- read_sav("~/Documents/PhD/1_Research/transitional-justice/tj-corruption-project/data/afro-barometer/AFB_Merged_R3.sav")
+
+afrobarometer_w3$year <- format(as.Date(afrobarometer_w3$dateintr, format="%Y-%m-%d"),"%Y")
+table(afrobarometer_w3$year)
+table(afrobarometer_w3$year, afrobarometer_w3$country)
+
+afrobarometer_w3$survey <- 'afrobarometer_w3'
+
+afrobarometer_w3$country <- as.numeric(afrobarometer_w3$country)
+
+afrobarometer_w3 %<>%
+  mutate(country = recode(country,
+                          "1" = "Benin",
+                          "2" = "Botswana",
+                          "3" = "Cape Verde",
+                          "4" = "Ghana",
+                          "5" = "Kenya",
+                          "6" = "Lesotho",
+                          "7" = "Madagascar",
+                          "8" = "Malawi",
+                          "9" = "Mali",
+                          "10" = "Mozambique",
+                          "11" = "Namibia",
+                          "12" = "Nigeria",
+                          "13" = "Senegal",
+                          "14" = "South Africa",
+                          "15" = "Tanzania",
+                          "16" = "Uganda",
+                          "17" = "Zambia",
+                          "18" = "Zimbabwe"))
+
+afrobarometer_w3 %<>%
+  mutate(corr_pres = case_when(q56a == 0 ~ 1, #none
+                               q56a == 1 ~ 2,
+                               q56a == 2 ~ 3,
+                               q56a == 3 ~ 4), #all of them
+         corr_gov = case_when(q56d == 0 ~ 1, #none
+                              q56d == 1 ~ 2,
+                              q56d == 2 ~ 3,
+                              q56d == 3 ~ 4), #all of them
+         corr_jud = case_when(q56h == 0 ~ 1, #none
+                              q56h == 1 ~ 2,
+                              q56h == 2 ~ 3,
+                              q56h == 3 ~ 4), #all of them
+         fight_corr = case_when(q65j == 1 ~ 1, #1 very badly
+                                q65j == 2 ~ 2,
+                                q65j == 3 ~ 3,
+                                q65j == 4 ~ 4), #4 very well
+         corr_leaders = case_when(q56b == 0 ~ 1, #none of them
+                                  q56b == 1 ~ 2,
+                                  q56b == 2 ~ 3,
+                                  q56b == 3 ~ 4)) %>% # all of them
+  purrr::modify_at(c('corr_pres', 'corr_gov', 'corr_jud', "fight_corr", 
+                     "corr_leaders"), factor) %>%
+  select(country, year, corr_pres, corr_gov, corr_jud, fight_corr, corr_leaders, survey) 
+
+```
+
+### Wave 4
+
+```{r}
+afrobarometer_w4 <- read_sav("~/Documents/PhD/1_Research/transitional-justice/tj-corruption-project/data/afro-barometer/AFB_Merged_R4.sav")
+
+afrobarometer_w4$year <- format(as.Date(afrobarometer_w4$DATEINTR, format="%Y-%m-%d"),"%Y")
+table(afrobarometer_w4$year)
+
+afrobarometer_w4$survey <- 'afrobarometer_w4'
+
+afrobarometer_w4$country <- as.numeric(afrobarometer_w4$COUNTRY)
+
+afrobarometer_w4 %<>%
+  mutate(country = recode(country,
+                          "1" = "Benin",
+                          "2" = "Botswana",
+                          "3" = "Burkina Faso",
+                          "4" = "Cape Verde",
+                          "5" = "Ghana",
+                          "6" = "Kenya",
+                          "7" = "Lesotho",
+                          "8" = "Liberia",
+                          "9" = "Madagascar",
+                          "10" = "Malawi",
+                          "11" = "Mali",
+                          "12" = "Mozambique",
+                          "13" = "Namibia",
+                          "14" = "Nigeria",
+                          "15" = "Senegal",
+                          "16" = "South Africa",
+                          "17" = "Tanzania",
+                          "18" = "Uganda",
+                          "19" = "Zambia",
+                          "20" = "Zimbabwe"))
+
+afrobarometer_w4 %<>%
+  mutate(corr_pres = case_when(Q50A == 0 ~ 1, #none
+                               Q50A == 1 ~ 2,
+                               Q50A == 2 ~ 3,
+                               Q50A == 3 ~ 4), #all of them
+         corr_gov = case_when(Q50D == 0 ~ 1, #none
+                              Q50D == 1 ~ 2,
+                              Q50D == 2 ~ 3,
+                              Q50D == 3 ~ 4), #all of them
+         corr_jud = case_when(Q50G == 0 ~ 1, #none
+                              Q50G == 1 ~ 2,
+                              Q50G == 2 ~ 3,
+                              Q50G == 3 ~ 4), #all of them
+         fight_corr = case_when(Q57K == 1 ~ 1, #1 very badly
+                                Q57K == 2 ~ 2,
+                                Q57K == 3 ~ 3,
+                                Q57K == 4 ~ 4), #4 very well
+         corr_leaders = case_when(Q50B == 0 ~ 1, #none of them
+                                  Q50B == 1 ~ 2,
+                                  Q50B == 2 ~ 3,
+                                  Q50B == 3 ~ 4)) %>% # all of them
+  purrr::modify_at(c('corr_pres', 'corr_gov', 'corr_jud', "fight_corr", 
+                     "corr_leaders"), factor) %>%
+  select(country, year, corr_pres, corr_gov, corr_jud, fight_corr, corr_leaders, survey) 
+```
+
+### Wave 5
+
+```{r}
+afrobarometer_w5 <- read_sav("~/Documents/PhD/1_Research/transitional-justice/tj-corruption-project/data/afro-barometer/AFB_Merged_R5.sav")
+
+afrobarometer_w5$year <- format(as.Date(afrobarometer_w5$DATEINTR, format="%Y-%m-%d"),"%Y")
+table(afrobarometer_w5$year)
+
+afrobarometer_w5$survey <- 'afrobarometer_w5'
+
+afrobarometer_w5$country <- as.numeric(afrobarometer_w5$COUNTRY)
+
+afrobarometer_w5 %<>%
+  mutate(country = recode(country,
+                          "1" = "Algeria",
+                          "2" = "Benin",
+                          "3" = "Botswana",
+                          "4" = "Burkina Faso",
+                          "5" = "Burundi",
+                          "6" = "Cameroon",
+                          "7" = "Cape Verde",
+                          "8" = "Cote d’Ivoire",
+                          "9" = "Egypt",
+                          "10" = "Eswatini",
+                          "11" = "Ghana",
+                          "12" = "Guinea",
+                          "13" = "Kenya",
+                          "14" = "Lesotho",
+                          "15" = "Liberia",
+                          "16" = "Madagascar",
+                          "17" = "Malawi",
+                          "18" = "Mali",
+                          "19" = "Mauritius",
+                          "20" = "Morocco",
+                          "21" = "Mozambique",
+                          "22" = "Namibia",
+                          "23" = "Niger",
+                          "24" = "Nigeria",
+                          "25" = "Senegal",
+                          "26" = "Sierra Leone",
+                          "27" = "South Africa",
+                          "28" = "Sudan",
+                          "29" = "Swaziland",
+                          "30" = "Tanzania",
+                          "31" = "Togo",
+                          "32" = "Tunisia",
+                          "33" = "Uganda",
+                          "34" = "Zambia",
+                          "35" = "Zimbabwe"))
+
+afrobarometer_w5 %<>%
+  mutate(corr_pres = case_when(Q60A == 0 ~ 1, #none
+                               Q60A == 1 ~ 2,
+                               Q60A == 2 ~ 3,
+                               Q60A == 3 ~ 4), #all of them
+         corr_gov = case_when(Q60C == 0 ~ 1, #none
+                              Q60C == 1 ~ 2,
+                              Q60C == 2 ~ 3,
+                              Q60C == 3 ~ 4), #all of them
+         fight_corr = case_when(Q65K == 1 ~ 1, #1 very badly
+                                Q65K == 2 ~ 2,
+                                Q65K == 3 ~ 3,
+                                Q65K == 4 ~ 4), #4 very well
+         corr_leaders = case_when(Q60B == 0 ~ 1, #none of them
+                                  Q60B == 1 ~ 2,
+                                  Q60B == 2 ~ 3,
+                                  Q60B == 3 ~ 4)) %>% # all of them
+  purrr::modify_at(c('corr_pres', 'corr_gov', "fight_corr", 
+                     "corr_leaders"), factor) %>%
+  select(country, year, corr_pres, corr_gov, fight_corr, corr_leaders, survey) 
+```
+
+### Wave 6
+
+```{r}
+afrobarometer_w6 <- read_dta("~/Documents/PhD/1_Research/transitional-justice/tj-corruption-project/data/afro-barometer/AFB_Merged_R6.dta")
+
+afrobarometer_w6$year <- format(as.Date(afrobarometer_w6$DATEINTR, format="%Y-%m-%d"),"%Y")
+
+afrobarometer_w6$survey <- 'afrobarometer_w6'
+
+afrobarometer_w6$country <- as.numeric(afrobarometer_w6$COUNTRY)
+
+afrobarometer_w6 %<>%
+  mutate(country = recode(country,
+                          "1" = "Algeria",
+                          "2" = "Benin",
+                          "3" = "Botswana",
+                          "4" = "Burkina Faso",
+                          "5" = "Burundi",
+                          "6" = "Cameroon",
+                          "7" = "Cape Verde",
+                          "8" = "Cote d’Ivoire",
+                          "9" = "Egypt",
+                          "10" = "Gabon",
+                          "11" = "Ghana",
+                          "12" = "Guinea",
+                          "13" = "Kenya",
+                          "14" = "Lesotho",
+                          "15" = "Liberia",
+                          "16" = "Madagascar",
+                          "17" = "Malawi",
+                          "18" = "Mali",
+                          "19" = "Mauritius",
+                          "20" = "Morocco",
+                          "21" = "Mozambique",
+                          "22" = "Namibia",
+                          "23" = "Niger",
+                          "24" = "Nigeria",
+                          "25" = "Sao Tomé and Príncipe",
+                          "26" = "Senegal",
+                          "27" = "Sierra Leone",
+                          "28" = "South Africa",
+                          "29" = "Sudan",
+                          "30" = "Swaziland",
+                          "31" = "Tanzania",
+                          "32" = "Togo",
+                          "33" = "Tunisia",
+                          "34" = "Uganda",
+                          "35" = "Zambia",
+                          "36" = "Zimbabwe"))
+
+afrobarometer_w6 %<>%
+  mutate(corr_pres = case_when(Q53A == 0 ~ 1, #none
+                               Q53A == 1 ~ 2,
+                               Q53A == 2 ~ 3,
+                               Q53A == 3 ~ 4), #all of them
+         corr_gov = case_when(Q53C == 0 ~ 1, #none
+                              Q53C == 1 ~ 2,
+                              Q53C == 2 ~ 3,
+                              Q53C == 3 ~ 4), #all of them
+         corr_jud = case_when(Q53G == 0 ~ 1, #none
+                              Q53G == 1 ~ 2,
+                              Q53G == 2 ~ 3,
+                              Q53G == 3 ~ 4), #all of them
+         fight_corr = case_when(Q66K == 1 ~ 1, #1 very badly
+                                Q66K == 2 ~ 2,
+                                Q66K == 3 ~ 3,
+                                Q66K == 4 ~ 4), #4 very well
+         corr_leaders = case_when(Q53B == 0 ~ 1, #none of them
+                                  Q53B == 1 ~ 2,
+                                  Q53B == 2 ~ 3,
+                                  Q53B == 3 ~ 4)) %>% # all of them
+  purrr::modify_at(c('corr_pres', 'corr_gov', 'corr_jud', "fight_corr", 
+                     "corr_leaders"), factor) %>%
+  select(country, year, corr_pres, corr_gov, corr_jud, fight_corr, corr_leaders, survey) 
+```
+
+### Wave 7
+
+```{r}
+afrobarometer_w7 <- read_sav("~/Documents/PhD/1_Research/transitional-justice/tj-corruption-project/data/afro-barometer/AFB_Merged_R7.sav")
+
+afrobarometer_w7$year <- format(as.Date(afrobarometer_w7$DATEINTR, format="%Y-%m-%d"),"%Y")
+
+afrobarometer_w7$survey <- 'afrobarometer_w7'
+
+afrobarometer_w7$country <- as.numeric(afrobarometer_w7$COUNTRY)
+
+afrobarometer_w7 %<>%
+  mutate(country = recode(country,
+                          "1" = "Benin",
+                          "2" = "Botswana",
+                          "3" = "Burkina Faso",
+                          "4" = "Cape Verde",
+                          "5" = "Cameroon",
+                          "6" = "Cote d’Ivoire",
+                          "7" = "Swaziland",
+                          "8" = "Gabon",
+                          "9" = "Gambia",
+                          "10" = "Ghana",
+                          "11" = "Guinea",
+                          "12" = "Kenya",
+                          "13" = "Lesotho",
+                          "14" = "Liberia",
+                          "15" = "Madagascar",
+                          "16" = "Malawi",
+                          "17" = "Mali",
+                          "18" = "Mauritius",
+                          "19" = "Morocco",
+                          "20" = "Mozambique",
+                          "21" = "Namibia",
+                          "22" = "Niger",
+                          "23" = "Nigeria",
+                          "24" = "Sao Tomé and Príncipe",
+                          "25" = "Senegal",
+                          "26" = "Sierra Leone",
+                          "27" = "South Africa",
+                          "28" = "Sudan",
+                          "29" = "Tanzania",
+                          "30" = "Togo",
+                          "31" = "Tunisia",
+                          "32" = "Uganda",
+                          "33" = "Zambia",
+                          "34" = "Zimbabwe"))
+
+afrobarometer_w7 %<>%
+  mutate(corr_pres = case_when(Q44A == 0 ~ 1, #none
+                               Q44A == 1 ~ 2,
+                               Q44A == 2 ~ 3,
+                               Q44A == 3 ~ 4), #all of them
+         corr_gov = case_when(Q44C == 0 ~ 1, #none
+                              Q44C == 1 ~ 2,
+                              Q44C == 2 ~ 3,
+                              Q44C == 3 ~ 4), #all of them
+         corr_jud = case_when(Q44F == 0 ~ 1, #none
+                              Q44F == 1 ~ 2,
+                              Q44F == 2 ~ 3,
+                              Q44F == 3 ~ 4), #all of them
+         fight_corr = case_when(Q56K == 1 ~ 1, #1 very badly
+                                Q56K == 2 ~ 2,
+                                Q56K == 3 ~ 3,
+                                Q56K == 4 ~ 4), #4 very well
+         corr_leaders = case_when(Q44B == 0 ~ 1, #none of them
+                                  Q44B == 1 ~ 2,
+                                  Q44B == 2 ~ 3,
+                                  Q44B == 3 ~ 4)) %>% # all of them
+  purrr::modify_at(c('corr_pres', 'corr_gov', 'corr_jud', "fight_corr", 
+                     "corr_leaders"), factor) %>%
+  select(country, year, corr_pres, corr_gov, corr_jud, fight_corr, corr_leaders, survey) 
+
+```
+
+Merge all databases
+
+```{r}
+afrobarometer_final <- full_join(afrobarometer_w1, afrobarometer_w2)
+afrobarometer_final <- full_join(afrobarometer_final, afrobarometer_w3)
+afrobarometer_final <- full_join(afrobarometer_final, afrobarometer_w4)
+afrobarometer_final <- full_join(afrobarometer_final, afrobarometer_w5)
+afrobarometer_final <- full_join(afrobarometer_final, afrobarometer_w6)
+afrobarometer_final <- full_join(afrobarometer_final, afrobarometer_w7)
+
+# Convert some factors to numeric
+afrobarometer_final %<>% mutate_at(c('year', 'fight_corr',
+                                      'corr_leaders', 'corr_pres', 
+                                      'corr_gov', 'corr_jud'), as.numeric)
+```
+
+## Arab Barometer
+
+### Wave 1
+
+```{r}
+arab_barometer_w1 <- read_dta("~/Documents/PhD/1_Research/transitional-justice/tj-corruption-project/data/arab-barometer/AB_Wave_I_2006-2009.dta")
+
+#Keep specific variables
+arab_barometer_w1  %<>% select(country, q253, q2011, q2012, q254) %>%
+  rename(widespread_corr = q253,
+         conf_gov = q2011,
+         conf_just = q2012,
+         fight_corr = q254)
+
+arab_barometer_w1 %<>% mutate(across(, ~as.numeric(.)))
+
+# Widespread corruption
+# 1 hardly anyone 2 not a lot of officials 3 most officials 4 almost everyone
+table(arab_barometer_w1$widespread_corr)
+arab_barometer_w1 %<>% mutate(widespread_corr = 
+                             replace(widespread_corr, 
+                                     widespread_corr == 98 | widespread_corr== 99, NA))
+
+# Confidence in government
+#1 a great deal 2 quite a lot 3 not very much 4 none at all
+table(arab_barometer_w1$conf_gov)
+arab_barometer_w1$conf_gov <- recode(arab_barometer_w1$conf_gov,
+                                      "4 " = 1,
+                                      "3" = 2,
+                                      "2" = 3,
+                                      "1" = 4)
+arab_barometer_w1 %<>% mutate(conf_gov = 
+                             replace(conf_gov, 
+                                     conf_gov == 98 | conf_gov== 99, NA))
+
+# Confidence courts
+#1 a great deal 2 quite a lot 3 not very much 4 none at all
+table(arab_barometer_w1$conf_just)
+arab_barometer_w1$conf_just <- recode(arab_barometer_w1$conf_just,
+                                      "4 " = 1,
+                                      "3" = 2,
+                                      "2" = 3,
+                                      "1" = 4)
+arab_barometer_w1 %<>% mutate(conf_just = 
+                             replace(conf_just, 
+                                     conf_just == 98 | conf_just == 99, NA))
+
+# Fight corruption
+# 1 to a large extent 2 to a medium 3 small 4 not at all
+table(arab_barometer_w1$fight_corr)
+arab_barometer_w1$fight_corr <- recode(arab_barometer_w1$fight_corr,
+                                      "4 " = 1,
+                                      "3" = 2,
+                                      "2" = 3,
+                                      "1" = 4)
+arab_barometer_w1 %<>% mutate(fight_corr = 
+                             replace(fight_corr, fight_corr == 97 |
+                                     fight_corr == 98 | fight_corr == 99, NA))
+
+
+arab_barometer_w1$country[arab_barometer_w1$country == "1"] <- "Jordan"
+arab_barometer_w1$country[arab_barometer_w1$country == "2"] <- "Palestine" 
+arab_barometer_w1$country[arab_barometer_w1$country == "3"] <- "Algeria"
+arab_barometer_w1$country[arab_barometer_w1$country == "4"] <- "Morocco" 
+arab_barometer_w1$country[arab_barometer_w1$country == "5"] <- "Kuwait" 
+arab_barometer_w1$country[arab_barometer_w1$country == "6"] <- "Lebanon" 
+arab_barometer_w1$country[arab_barometer_w1$country == "7"] <- "Yemen"
+arab_barometer_w1$country[arab_barometer_w1$country == "8"] <- "Bahrain"
+
+arab_barometer_w1$year <- 0
+arab_barometer_w1$year[arab_barometer_w1$country == "Algeria"] <- "2006"
+arab_barometer_w1$year[arab_barometer_w1$country == "Bahrain"] <- "2009"
+arab_barometer_w1$year[arab_barometer_w1$country == "Jordan"] <- "2006"
+arab_barometer_w1$year[arab_barometer_w1$country == "Lebanon"] <- "2006"
+arab_barometer_w1$year[arab_barometer_w1$country == "Morocco"] <- "2007"
+arab_barometer_w1$year[arab_barometer_w1$country == "Palestine"] <- "2006"
+arab_barometer_w1$year[arab_barometer_w1$country == "Yemen"] <- "2007"
+table(arab_barometer_w1$year)
+
+arab_barometer_w1$year <- as.numeric(arab_barometer_w1$year)
+table(arab_barometer_w1$country, arab_barometer_w1$year)
+
+arab_barometer_w1 %<>%
+purrr::modify_at(c("widespread_corr", "fight_corr", "conf_gov", "conf_just"), factor)
+```
+
+### Wave 2
+
+```{r}
+arab_barometer_w2 <- read_dta("~/Documents/PhD/1_Research/transitional-justice/tj-corruption-project/data/arab-barometer/AB_Wave_II_2010-2011.dta")
+
+arab_barometer_w2$year <- 0
+arab_barometer_w2$country <- as.numeric(arab_barometer_w2$country)
+
+arab_barometer_w2$year[arab_barometer_w2$country == "1"] <- "2011"
+arab_barometer_w2$year[arab_barometer_w2$country == "5"] <- "2011"
+arab_barometer_w2$year[arab_barometer_w2$country == "7"] <- "2011"
+arab_barometer_w2$year[arab_barometer_w2$country == "8"] <- "2010"
+arab_barometer_w2$year[arab_barometer_w2$country == "10"] <- "2010"
+arab_barometer_w2$year[arab_barometer_w2$country == "15"] <- "2010"
+arab_barometer_w2$year[arab_barometer_w2$country == "17"] <- "2011"
+arab_barometer_w2$year[arab_barometer_w2$country == "19"] <- "2010"
+arab_barometer_w2$year[arab_barometer_w2$country == "21"] <- "2011"
+arab_barometer_w2$year[arab_barometer_w2$country == "22"] <- "2011"
+
+arab_barometer_w2$country[arab_barometer_w2$country == "1"] <- "Algeria"
+arab_barometer_w2$country[arab_barometer_w2$country == "5"] <- "Egypt"
+arab_barometer_w2$country[arab_barometer_w2$country == "7"] <- "Iraq"
+arab_barometer_w2$country[arab_barometer_w2$country == "8"] <- "Jordan"
+arab_barometer_w2$country[arab_barometer_w2$country == "10"] <- "Lebanon"
+arab_barometer_w2$country[arab_barometer_w2$country == "15"] <- "Palestine"
+arab_barometer_w2$country[arab_barometer_w2$country == "17"] <- "Saudi Arabia"
+arab_barometer_w2$country[arab_barometer_w2$country == "19"] <- "Sudan"
+arab_barometer_w2$country[arab_barometer_w2$country == "21"] <- "Tunisia"
+arab_barometer_w2$country[arab_barometer_w2$country == "22"] <- "Yemen"
+
+arab_barometer_w2 %<>%
+  mutate(sat_dem = case_when(q513 == 1 ~ 1,
+                             q513 == 2 ~ 1,
+                             q513 == 3 ~ 1,
+                             q513 == 4 ~ 2,
+                             q513 == 5 ~ 2,
+                             q513 == 6 ~ 3,
+                             q513 == 7 ~ 3,
+                             q513 == 8 ~ 4,
+                             q513 == 9 ~ 4,
+                             q513 == 10 ~ 4),
+         fight_corr = case_when(q211 == 4 ~ 1,
+                                q211 == 3 ~ 2,
+                                q211 == 2 ~ 3,
+                                q211 == 1 ~ 4),
+         conf_gov = case_when(q2011 == 4 ~ 1,
+                              q2011 == 3 ~ 2,
+                              q2011 == 2 ~ 3,
+                              q2011 == 1 ~ 4),
+         conf_just = case_when(q2012 == 4 ~ 1,
+                               q2012 == 3 ~ 2,
+                               q2012 == 2 ~ 3,
+                               q2012 == 1 ~ 4)) %>%
+  purrr::modify_at(c("sat_dem", "fight_corr", "conf_gov", "conf_just"), factor) %>%
+  select(country, year, sat_dem, fight_corr, conf_gov, conf_just) 
+```
+
+### Wave 3
+
+```{r}
+arab_barometer_w3 <- read_sav("data/arab-barometer/ABIII_English.sav")
+
+arab_barometer_w3$year <- 0
+arab_barometer_w3$country <- as.numeric(arab_barometer_w3$country)
+
+arab_barometer_w3$country[arab_barometer_w3$country == "1"] <- "Algeria"
+arab_barometer_w3$country[arab_barometer_w3$country == "5"] <- "Egypt"
+arab_barometer_w3$country[arab_barometer_w3$country == "7"] <- "Iraq"
+arab_barometer_w3$country[arab_barometer_w3$country == "8"] <- "Jordan"
+arab_barometer_w3$country[arab_barometer_w3$country == "9"] <- "Kuwait"
+arab_barometer_w3$country[arab_barometer_w3$country == "10"] <- "Lebanon"
+arab_barometer_w3$country[arab_barometer_w3$country == "11"] <- "Libya"
+arab_barometer_w3$country[arab_barometer_w3$country == "13"] <- "Morocco"
+arab_barometer_w3$country[arab_barometer_w3$country == "15"] <- "Palestine"
+arab_barometer_w3$country[arab_barometer_w3$country == "19"] <- "Sudan"
+arab_barometer_w3$country[arab_barometer_w3$country == "21"] <- "Tunisia"
+arab_barometer_w3$country[arab_barometer_w3$country == "22"] <- "Yemen"
+
+arab_barometer_w3$year[arab_barometer_w3$country == "Algeria"] <- "2013"
+arab_barometer_w3$year[arab_barometer_w3$country == "Egypt"] <- "2013"
+arab_barometer_w3$year[arab_barometer_w3$country == "Iraq"] <- "2013"
+arab_barometer_w3$year[arab_barometer_w3$country == "Jordan"] <- "2012"
+arab_barometer_w3$year[arab_barometer_w3$country == "Kuwait"] <- "2014"
+arab_barometer_w3$year[arab_barometer_w3$country == "Lebanon"] <- "2013"
+arab_barometer_w3$year[arab_barometer_w3$country == "Libya"] <- "2014"
+arab_barometer_w3$year[arab_barometer_w3$country == "Morocco"] <- "2013"
+arab_barometer_w3$year[arab_barometer_w3$country == "Palestine"] <- "2012"
+arab_barometer_w3$year[arab_barometer_w3$country == "Sudan"] <- "2013"
+arab_barometer_w3$year[arab_barometer_w3$country == "Tunisia"] <- "2013"
+arab_barometer_w3$year[arab_barometer_w3$country == "Yemen"] <- "2013"
+
+arab_barometer_w3 %<>%
+  mutate(sat_dem = case_when(q513 == 1 ~ 1,
+                             q513 == 2 ~ 1,
+                             q513 == 3 ~ 1,
+                             q513 == 4 ~ 2,
+                             q513 == 5 ~ 2,
+                             q513 == 6 ~ 3,
+                             q513 == 7 ~ 3,
+                             q513 == 8 ~ 4,
+                             q513 == 9 ~ 4,
+                             q513 == 10 ~ 4),
+         fight_corr = case_when(q211 == 4 ~ 1,
+                                q211 == 3 ~ 2,
+                                q211 == 2 ~ 3,
+                                q211 == 1 ~ 4),
+         conf_gov = case_when(q2011 == 4 ~ 1,
+                              q2011 == 3 ~ 2,
+                              q2011 == 2 ~ 3,
+                              q2011 == 1 ~ 4)) %>%
+  purrr::modify_at(c("sat_dem", "fight_corr", "conf_gov"), factor) %>%
+  select(country, year, sat_dem, fight_corr, conf_gov) 
+```
+
+### Wave 4
+
+```{r}
+arab_barometer_w4 <- read_dta("~/Documents/PhD/1_Research/transitional-justice/tj-corruption-project/data/arab-barometer/AB_Wave_IV_2014-2017.dta") 
+
+arab_barometer_w4$year <- 0
+arab_barometer_w4$country <- as.numeric(arab_barometer_w4$country)
+
+arab_barometer_w4$country[arab_barometer_w4$country == "1"] <- "Algeria"
+arab_barometer_w4$country[arab_barometer_w4$country == "5"] <- "Egypt"
+arab_barometer_w4$country[arab_barometer_w4$country == "8"] <- "Jordan"
+arab_barometer_w4$country[arab_barometer_w4$country == "10"] <- "Lebanon"
+arab_barometer_w4$country[arab_barometer_w4$country == "13"] <- "Morocco"
+arab_barometer_w4$country[arab_barometer_w4$country == "15"] <- "Palestine"
+arab_barometer_w4$country[arab_barometer_w4$country == "21"] <- "Tunisia"
+
+arab_barometer_w4$year[arab_barometer_w4$country == "Algeria"] <- "2016"
+arab_barometer_w4$year[arab_barometer_w4$country == "Egypt"] <- "2016"
+arab_barometer_w4$year[arab_barometer_w4$country == "Jordan"] <- "2016"
+arab_barometer_w4$year[arab_barometer_w4$country == "Lebanon"] <- "2016"
+arab_barometer_w4$year[arab_barometer_w4$country == "Morocco"] <- "2016"
+arab_barometer_w4$year[arab_barometer_w4$country == "Palestine"] <- "2016"
+arab_barometer_w4$year[arab_barometer_w4$country == "Tunisia"] <- "2016"
+
+arab_barometer_w4 %<>%
+  mutate(sat_dem = case_when(q513 == 1 ~ 1,
+                             q513 == 2 ~ 1,
+                             q513 == 3 ~ 1,
+                             q513 == 4 ~ 2,
+                             q513 == 5 ~ 2,
+                             q513 == 6 ~ 3,
+                             q513 == 7 ~ 3,
+                             q513 == 8 ~ 4,
+                             q513 == 9 ~ 4,
+                             q513 == 10 ~ 4),
+         fight_corr = case_when(q211 == 4 ~ 1,
+                                q211 == 3 ~ 2,
+                                q211 == 2 ~ 3,
+                                q211 == 1 ~ 4),
+         conf_gov = case_when(q2011 == 4 ~ 1,
+                              q2011 == 3 ~ 2,
+                              q2011 == 2 ~ 3,
+                              q2011 == 1 ~ 4),
+         conf_just = case_when(q2012 == 4 ~ 1,
+                               q2012 == 3 ~ 2,
+                               q2012 == 2 ~ 3,
+                               q2012 == 1 ~ 4)) %>%
+  purrr::modify_at(c("sat_dem", "fight_corr", "conf_gov", "conf_just"), factor) %>%
+  select(country, year, sat_dem, fight_corr, conf_gov, conf_just) 
+```
+
+### Wave 5
+
+```{r}
+arab_barometer_w5 <- read_dta("~/Documents/PhD/1_Research/transitional-justice/tj-corruption-project/data/arab-barometer/AB_Wave_V_2018-2019.dta") 
+
+arab_barometer_w5$year <- 0
+arab_barometer_w5$country <- as.numeric(arab_barometer_w5$country)
+
+arab_barometer_w5$country <- recode(arab_barometer_w5$country,
+                             "1" = "Algeria",
+                             "5" = "Egypt",
+                             "7" = "Iraq",
+                             "8" = "Jordan",
+                             "9" = "Kuwait",
+                             "10" = "Lebanon",
+                             "11" = "Libya",
+                             "13" = "Morocco",
+                             "15" = "Palestine",
+                             "19" = "Sudan",
+                             "21" = "Tunisia",
+                             "22" = "Yemen")
+
+arab_barometer_w5$year[arab_barometer_w5$country == "Algeria"] <- "2019"
+arab_barometer_w5$year[arab_barometer_w5$country == "Egypt"] <- "2018"
+arab_barometer_w5$year[arab_barometer_w5$country == "Iraq"] <- "2019"
+arab_barometer_w5$year[arab_barometer_w5$country == "Jordan"] <- "2018"
+arab_barometer_w5$year[arab_barometer_w5$country == "Kuwait"] <- "2019"
+arab_barometer_w5$year[arab_barometer_w5$country == "Lebanon"] <- "2018"
+arab_barometer_w5$year[arab_barometer_w5$country == "Libya"] <- "2019"
+arab_barometer_w5$year[arab_barometer_w5$country == "Morocco"] <- "2018"
+arab_barometer_w5$year[arab_barometer_w5$country == "Palestine"] <- "2018"
+arab_barometer_w5$year[arab_barometer_w5$country == "Sudan"] <- "2018"
+arab_barometer_w5$year[arab_barometer_w5$country == "Tunisia"] <- "2018"
+arab_barometer_w5$year[arab_barometer_w5$country == "Yemen"] <- "2018"
+
+arab_barometer_w5 %<>%
+  mutate(sat_dem = case_when(Q513 == 1 ~ 1,
+                             Q513 == 2 ~ 1,
+                             Q513 == 3 ~ 1,
+                             Q513 == 4 ~ 2,
+                             Q513 == 5 ~ 2,
+                             Q513 == 6 ~ 3,
+                             Q513 == 7 ~ 3,
+                             Q513 == 8 ~ 4,
+                             Q513 == 9 ~ 4,
+                             Q513 == 10 ~ 4),
+         fight_corr = case_when(Q211 == 4 ~ 1,
+                                Q211 == 3 ~ 2,
+                                Q211 == 2 ~ 3,
+                                Q211 == 1 ~ 4),
+         conf_gov = case_when(Q201A_1 == 4 ~ 1,
+                              Q201A_1 == 3 ~ 2,
+                              Q201A_1 == 2 ~ 3,
+                              Q201A_1 == 1 ~ 4),
+         conf_just = case_when(Q201A_2 == 4 ~ 1,
+                               Q201A_2 == 3 ~ 2,
+                               Q201A_2 == 2 ~ 3,
+                               Q201A_2 == 1 ~ 4),
+         extent_corr = case_when(Q210 == 4 ~ 1,
+                                 Q210 == 3 ~ 2,
+                                 Q210 == 2 ~ 3,
+                                 Q210 == 1 ~ 4),
+         groups_corruption = case_when(Q211A == 1 ~ 1,
+                                       Q211A == 2 ~ 2,
+                                       Q211A == 3 ~ 3,
+                                       Q211A == 4 ~ 4,)) %>%
+  purrr::modify_at(c("sat_dem", "fight_corr", "conf_gov", "conf_just", "extent_corr",
+                     "groups_corruption"), factor) %>%
+  select(country, year, sat_dem, fight_corr, conf_gov, conf_just, extent_corr,
+         groups_corruption) 
+```
+
+### Wave 6
+
+```{r}
+arab_barometer_w6_p1 <- read_dta("~/Documents/PhD/1_Research/transitional-justice/tj-corruption-project/data/arab-barometer/AB_Wave_VI_P1-2020.dta")
+arab_barometer_w6_p2 <- read_dta("~/Documents/PhD/1_Research/transitional-justice/tj-corruption-project/data/arab-barometer/AB_Wave_VI_P2-2020.dta")
+arab_barometer_w6_p3 <- read_dta("~/Documents/PhD/1_Research/transitional-justice/tj-corruption-project/data/arab-barometer/AB_Wave_VI_P3-2021.dta")
+
+# Select specific columns
+arab_barometer_w6_p1 <- select(arab_barometer_w6_p1, 
+                               c(COUNTRY, DATE, Q201A_1, Q201A_2, Q210, Q211, Q204A_3))
+arab_barometer_w6_p2 <- select(arab_barometer_w6_p2, 
+                               c(COUNTRY, DATE, Q201A_1, Q201A_2, Q210))
+arab_barometer_w6_p3 <- select(arab_barometer_w6_p3, 
+                               c(COUNTRY, DATE, Q201A_1, Q201A_2, Q210, Q211, Q204A_3))
+
+arab_barometer_w6_p2$Q211 <- NA
+arab_barometer_w6_p2$Q204A_3 <- NA
+arab_barometer_w6_p3$DATE <- as.Date(arab_barometer_w6_p3$DATE)
+
+arab_barometer_w6 <- rbind(arab_barometer_w6_p1, arab_barometer_w6_p2)
+arab_barometer_w6 <- bind_rows(arab_barometer_w6, arab_barometer_w6_p3)
+names(arab_wave6)
+
+arab_barometer_w6$COUNTRY <- as.numeric(arab_barometer_w6$COUNTRY)
+arab_barometer_w6$year <- format(as.Date(arab_barometer_w6$DATE, format="%Y-%m-%d"),"%Y")
+
+arab_barometer_w6$country <- recode(arab_barometer_w6$COUNTRY,
+                             "1" = "Algeria",
+                             "7" = "Iraq",
+                             "8" = "Jordan",
+                             "10" = "Lebanon",
+                             "11" = "Libya",
+                             "13" = "Morocco",
+                             "21" = "Tunisia")
+
+
+arab_barometer_w6 %<>%
+  mutate(sat_dem = case_when(Q204A_3 == 4 ~ 1,
+                             Q204A_3 == 3 ~ 1,
+                             Q204A_3 == 2 ~ 1,
+                             Q204A_3 == 1 ~ 2),
+         fight_corr = case_when(Q211 == 4 ~ 1,
+                                Q211 == 3 ~ 2,
+                                Q211 == 2 ~ 3,
+                                Q211 == 1 ~ 4),
+         conf_gov = case_when(Q201A_1 == 4 ~ 1,
+                              Q201A_1 == 3 ~ 2,
+                              Q201A_1 == 2 ~ 3,
+                              Q201A_1 == 1 ~ 4),
+         conf_just = case_when(Q201A_2 == 4 ~ 1,
+                               Q201A_2 == 3 ~ 2,
+                               Q201A_2 == 2 ~ 3,
+                               Q201A_2 == 1 ~ 4),
+         extent_corr = case_when(Q210 == 4 ~ 1,
+                                 Q210 == 3 ~ 2,
+                                 Q210 == 2 ~ 3,
+                                 Q210 == 1 ~ 4)) %>%
+  purrr::modify_at(c("sat_dem", "fight_corr", "conf_gov", "conf_just", "extent_corr"), 
+                   factor) %>%
+  select(country, year, sat_dem, fight_corr, conf_gov, conf_just, extent_corr) 
+```
+
+Merge all databases
+
+```{r}
+arab_barometer_w1$year <- as.numeric(arab_barometer_w1$year)
+arab_barometer_w2$year <- as.numeric(arab_barometer_w2$year)
+arab_barometer_w3$year <- as.numeric(arab_barometer_w3$year)
+arab_barometer_w4$year <- as.numeric(arab_barometer_w4$year)
+arab_barometer_w5$year <- as.numeric(arab_barometer_w5$year)
+arab_barometer_w6$year <- as.numeric(arab_barometer_w6$year)
+
+arab_barometer_w1$survey <- 'arab_barometer_w1'
+arab_barometer_w2$survey <- 'arab_barometer_w2'
+arab_barometer_w3$survey <- 'arab_barometer_w3'
+arab_barometer_w4$survey <- 'arab_barometer_w4'
+arab_barometer_w5$survey <- 'arab_barometer_w5'
+arab_barometer_w6$survey <- 'arab_barometer_w6'
+
+arab_barometer_final <- full_join(arab_barometer_w1, arab_barometer_w2)
+arab_barometer_final <- full_join(arab_barometer_final, arab_barometer_w3)
+arab_barometer_final <- full_join(arab_barometer_final, arab_barometer_w4)
+arab_barometer_final <- full_join(arab_barometer_final, arab_barometer_w5)
+arab_barometer_final <- full_join(arab_barometer_final, arab_barometer_w6)
+
+# Convert some factors to numeric
+arab_barometer_final %<>% mutate_at(c('widespread_corr', 'conf_gov',
+                                      'conf_just', 'fight_corr', 
+                                      'year', 'sat_dem', 'extent_corr',
+                                      'groups_corruption'), as.numeric)
+```
+
+## Asiabarometer 
+
+### Wave 1
+
+```{r}
+asiabarometer_w1 <- read_sav("data/asia-barometer/W1 Merged Data/Wave.1_Data/Merge/Wave1_20170906.sav")
+
+asiabarometer_w1 %<>%
+  mutate(country = case_when(country == 1 ~ 'Japan',
+                             country == 2 ~ 'Hong Kong',
+                             country == 3 ~ 'Korea',
+                             country == 4 ~ 'China',
+                             country == 5 ~ 'Mongolia',
+                             country == 6 ~ 'Philippines',
+                             country == 7 ~ 'Taiwan',
+                             country == 8 ~ 'Thailand'))
+
+names(asiabarometer_w1)
+
+asiabarometer_w1$survey <- 'asiabarometer_w1'
+
+asiabarometer_w1 %<>%
+  mutate(sat_dem = case_when(q098 == 4 ~ 1, #not all satisfied
+                             q098 == 3 ~ 2,
+                             q098 == 2 ~ 3,
+                             q098 == 1 ~ 4), #very satisfied 
+         evol_corr = case_when(q108 == 5 ~ 1, #much worse
+                               q108 == 4 ~ 2,
+                               q108 == 3 ~ 3,
+                               q108 == 2 ~ 4,
+                               q108 == 1 ~ 5),#much better
+         conf_gov = case_when(q008 == 4 ~ 1, #not at all
+                              q008 == 3 ~ 2,
+                              q008 == 2 ~ 3,
+                              q008 == 1 ~ 4),
+         conf_just = case_when(q007 == 4 ~ 1, #not at all
+                               q007 == 3 ~ 2,
+                               q007 == 2 ~ 3,
+                               q007 == 1 ~ 4)) %>%  #a great deal
+  rename(extent_corr = q141,
+         year = yrsurvey) %>% # from hardly anyone to almost everyone
+  purrr::modify_at(c("sat_dem", "conf_gov", "conf_just", "evol_corr"), 
+                   factor) %>%
+  select(country, year, sat_dem, conf_gov, conf_just, evol_corr,survey) 
+```
+
+### Wave 2
+
+```{r}
+asiabarometer_w2 <- read_sav("data/asia-barometer/W2 Merged Data/2w-3rd_release_all/merge/Wave2_20170724.sav")
+
+asiabarometer_w2 %<>%
+  mutate(country = case_when(country == 1 ~ 'Japan',
+                             country == 2 ~ 'Hong Kong',
+                             country == 3 ~ 'Korea',
+                             country == 4 ~ 'China',
+                             country == 5 ~ 'Mongolia',
+                             country == 6 ~ 'Philippines',
+                             country == 7 ~ 'Taiwan',
+                             country == 8 ~ 'Thailand',
+                             country == 9 ~ 'Indonesia',
+                             country == 10 ~ 'Singapore',
+                             country == 11 ~ 'Vietnam',
+                             country == 12 ~ 'Cambodia',
+                             country == 13 ~ 'Malaysia'))
+
+asiabarometer_w2$year <- 0
+
+asiabarometer_w2$year[asiabarometer_w2$country == "Japan"] <- "2007"
+asiabarometer_w2$year[asiabarometer_w2$country == "Hong Kong"] <- "2007"
+asiabarometer_w2$year[asiabarometer_w2$country == 'Korea'] <- "2006"
+asiabarometer_w2$year[asiabarometer_w2$country == 'China'] <- "2008"                      
+asiabarometer_w2$year[asiabarometer_w2$country == 'Mongolia'] <- "2006"
+asiabarometer_w2$year[asiabarometer_w2$country == 'Philippines'] <- "2005"
+asiabarometer_w2$year[asiabarometer_w2$country == 'Taiwan'] <- "2006"
+asiabarometer_w2$year[asiabarometer_w2$country == 'Thailand'] <- "2006"
+asiabarometer_w2$year[asiabarometer_w2$country == 'Indonesia'] <- "2006"
+asiabarometer_w2$year[asiabarometer_w2$country ==  'Singapore'] <- "2006"
+asiabarometer_w2$year[asiabarometer_w2$country ==  'Vietnam'] <- "2005"
+asiabarometer_w2$year[asiabarometer_w2$country ==  'Cambodia'] <- "2008"
+asiabarometer_w2$year[asiabarometer_w2$country ==  'Malaysia'] <- "2007"
+
+asiabarometer_w2$survey <- 'asiabarometer_w2'
+
+asiabarometer_w2 %<>%
+  mutate(sat_dem = case_when(q93 == 1 ~ 1, #not all satisfied
+                             q93 == 2 ~ 2,
+                             q93 == 3 ~ 3,
+                             q93 == 4 ~ 4), #very satisfied 
+         extent_corr = case_when(q118 == 4 ~ 1, #hardy anyone is involved
+                                 q118 == 3 ~ 2,
+                                 q118 == 2 ~ 3,
+                                 q118 == 1 ~ 4), #almost everyone is corrupt
+         evol_corr = case_when(q108 == 5 ~ 1, #much worse
+                               q108 == 4 ~ 2,
+                               q108 == 3 ~ 3,
+                               q108 == 2 ~ 4,
+                               q108 == 1 ~ 5),#much better
+         fight_corr = case_when(q120 == 4 ~ 1, #doing nothing
+                                q120 == 3 ~ 2,
+                                q120 == 2 ~ 3,
+                                q120 == 1 ~ 4, #doing its best
+                                q120 == 0 ~ 4), #doing this effectively
+         conf_gov = case_when(q9 == 1 ~ 1, #not at all
+                              q9 == 2 ~ 2,
+                              q9 == 3 ~ 3,
+                              q9 == 4 ~ 4),
+         conf_just = case_when(q8 == 1 ~ 1, #not at all
+                               q8 == 2 ~ 2,
+                               q8 == 3 ~ 3,
+                               q8 == 4 ~ 4)) %>%  #a great deal
+  purrr::modify_at(c("sat_dem", 'extent_corr', 'evol_corr',  'fight_corr', 'conf_gov',
+                     'conf_just'), 
+                   factor) %>%
+  select(country, year, sat_dem, extent_corr, conf_gov, conf_just, evol_corr, survey,
+         fight_corr) 
+
+```
+
+### Wave 3
+
+```{r}
+asiabarometer_w3 <- read_sav("data/asia-barometer/ABS3w.0.Merged/ABS3 merge20210506.sav")
+
+asiabarometer_w3 %<>%
+  mutate(country = case_when(country == 1 ~ 'Japan',
+                             country == 2 ~ 'Hong Kong',
+                             country == 3 ~ 'Korea',
+                             country == 4 ~ 'China',
+                             country == 5 ~ 'Mongolia',
+                             country == 6 ~ 'Philippines',
+                             country == 7 ~ 'Taiwan',
+                             country == 8 ~ 'Thailand',
+                             country == 9 ~ 'Indonesia',
+                             country == 10 ~ 'Singapore',
+                             country == 11 ~ 'Vietnam',
+                             country == 12 ~ 'Cambodia',
+                             country == 13 ~ 'Malaysia'))
+
+asiabarometer_w3$year <- 0
+
+asiabarometer_w3$year[asiabarometer_w3$country == "Japan"] <- "2011"
+asiabarometer_w3$year[asiabarometer_w3$country == "Hong Kong"] <- "2012"
+asiabarometer_w3$year[asiabarometer_w3$country == 'Korea'] <- "2011"
+asiabarometer_w3$year[asiabarometer_w3$country == 'China'] <- "2011"                      
+asiabarometer_w3$year[asiabarometer_w3$country == 'Mongolia'] <- "2010"
+asiabarometer_w3$year[asiabarometer_w3$country == 'Philippines'] <- "2010"
+asiabarometer_w3$year[asiabarometer_w3$country == 'Taiwan'] <- "2010"
+asiabarometer_w3$year[asiabarometer_w3$country == 'Thailand'] <- "2010"
+asiabarometer_w3$year[asiabarometer_w3$country == 'Indonesia'] <- "2011"
+asiabarometer_w3$year[asiabarometer_w3$country ==  'Singapore'] <- "2010"
+asiabarometer_w3$year[asiabarometer_w3$country ==  'Vietnam'] <- "2010"
+asiabarometer_w3$year[asiabarometer_w3$country ==  'Cambodia'] <- "2012"
+asiabarometer_w3$year[asiabarometer_w3$country ==  'Malaysia'] <- "2010"
+
+asiabarometer_w3$survey <- 'asiabarometer_w3'
+
+asiabarometer_w3 %<>%
+  mutate(sat_dem = case_when(q89 == 4 ~ 1, #not all satisfied
+                             q89 == 3 ~ 2,
+                             q89 == 2 ~ 3,
+                             q89 == 1 ~ 4), #very satisfied 
+         extent_corr = case_when(q117 == 1 ~ 1, #hardy anyone is involved
+                                 q117 == 2 ~ 2,
+                                 q117 == 3 ~ 3,
+                                 q117 == 4 ~ 4), #almost everyone is corrupt
+         fight_corr = case_when(q118 == 4 ~ 1, #doing nothing
+                                q118 == 3 ~ 2,
+                                q118 == 2 ~ 3,
+                                q118 == 1 ~ 4), #doing its best
+         conf_gov = case_when(q9 == 1 ~ 1, #not at all
+                              q9 == 2 ~ 2,
+                              q9 == 3 ~ 3,
+                              q9 == 4 ~ 4),
+         conf_just = case_when(q8 == 1 ~ 1, #not at all
+                               q8 == 2 ~ 2,
+                               q8 == 3 ~ 3,
+                               q8 == 4 ~ 4)) %>%  #a great deal
+  purrr::modify_at(c("sat_dem", 'extent_corr',  'fight_corr', 'conf_gov',
+                     'conf_just'), 
+                   factor) %>%
+  select(country, year, sat_dem, extent_corr, conf_gov, conf_just, survey,
+         fight_corr) 
+```
+
+### Wave 4
+
+```{r}
+asiabarometer_w4 <- read_dta("data/asia-barometer/W4 Merged Data/W4_v15_merged20181211_release.dta")
+
+asiabarometer_w4 %<>%
+  mutate(country = case_when(country == 1 ~ 'Japan',
+                             country == 2 ~ 'Hong Kong',
+                             country == 3 ~ 'Korea',
+                             country == 4 ~ 'China',
+                             country == 5 ~ 'Mongolia',
+                             country == 6 ~ 'Philippines',
+                             country == 7 ~ 'Taiwan',
+                             country == 8 ~ 'Thailand',
+                             country == 9 ~ 'Indonesia',
+                             country == 10 ~ 'Singapore',
+                             country == 11 ~ 'Vietnam',
+                             country == 12 ~ 'Cambodia',
+                             country == 13 ~ 'Malaysia',
+                             country == 14 ~ 'Myanmar'))
+
+asiabarometer_w4$survey <- 'asiabarometer_w4'
+
+asiabarometer_w4 %<>%
+  mutate(sat_dem = case_when(q92 == 4 ~ 1, #not all satisfied
+                             q92 == 3 ~ 2,
+                             q92 == 2 ~ 3,
+                             q92 == 1 ~ 4), #very satisfied 
+         extent_corr = case_when(q134 == 1 ~ 1, #hardy anyone is involved
+                                 q134 == 2 ~ 2,
+                                 q134 == 3 ~ 3,
+                                 q134 == 4 ~ 4), #almost everyone is corrupt
+         fight_corr = case_when(q135 == 4 ~ 1, #doing nothing
+                                q135 == 3 ~ 2,
+                                q135 == 2 ~ 3,
+                                q135 == 1 ~ 4), #doing its best
+         conf_gov = case_when(q119 == 1 ~ 1, #none
+                              q119 == 2 ~ 2,
+                              q119 == 3 ~ 3,
+                              q119 == 4 ~ 4), #all of them
+         conf_just = case_when(q122 == 1 ~ 1, #none
+                               q122 == 2 ~ 2,
+                               q122 == 3 ~ 3,
+                               q122 == 4 ~ 4)) %>%  #all of them
+  purrr::modify_at(c("sat_dem", 'extent_corr',  'fight_corr', 'conf_gov',
+                     'conf_just'), 
+                   factor) %>%
+  select(country, year, sat_dem, extent_corr, conf_gov, conf_just, survey,
+         fight_corr) 
+```
+
+Join All Asiabarometer
+
+```{r}
+asiabarometer_w1$year <- as.numeric(asiabarometer_w1$year)
+asiabarometer_w2$year <- as.numeric(asiabarometer_w2$year)
+asiabarometer_w3$year <- as.numeric(asiabarometer_w3$year)
+asiabarometer_w4$year <- as.numeric(asiabarometer_w4$year)
+
+asiabarometer_final <- full_join(asiabarometer_w1, asiabarometer_w2)
+asiabarometer_final <- full_join(asiabarometer_final, asiabarometer_w3)
+asiabarometer_final <- full_join(asiabarometer_final, asiabarometer_w4)
+
+#Convert some factors to numeric
+names(asiabarometer_final)
+asiabarometer_final %<>% mutate_at(c('year', 'sat_dem', 'conf_gov', 
+                                     'conf_just', 'evol_corr', 'extent_corr',
+                                     'fight_corr'), as.numeric)
+```
+
+## World Values Survey
+
+```{r}
+load("~/Documents/PhD/1_Research/transitional-justice/Data/Data 2022/TJ R Project/Data bases/WVS/WVS_TimeSeries_1981_2022_Rdata_v3_0.rdata")
+
+wvs_raw <- WVS_TimeSeries_1981_2022_spss_v3_0
+rm(WVS_TimeSeries_1981_2022_spss_v3_0)
+
+# Add country names and year
+wvs_raw$country <- NA
+wvs_raw$year <- wvs_raw$S020
+wvs_raw$ccode <- wvs_raw$COW_NUM
+
+library(countrycode)
+wvs_raw$country <- NA
+wvs_raw$year <- wvs_raw$S020
+wvs_raw$ccode <- wvs_raw$COW_NUM
+
+wvs_raw$country <- countrycode(wvs_raw$COUNTRY_ALPHA, origin = "iso3c",
+                             destination = "country.name", warn = TRUE)
+
+wvs_raw <- relocate(wvs_raw, country)
+```
+
+Select only variables that matter
+
+```{r}
+wvs$survey <- 'wvs'
+
+wvs %<>%
+  mutate(sat_dem = case_when(E110 == 4 ~ 1, #not all satisfied
+                             E110 == 3 ~ 2,
+                             E110 == 2 ~ 3,
+                             E110 == 1 ~ 4), #very satisfied 
+         extent_corr = case_when(E196 == 1 ~ 1, # Almost no public officials engaged in it
+                                 E196 == 2 ~ 2,
+                                 E196 == 3 ~ 3,
+                                 E196 == 4 ~ 4), #Almost all public officials
+         conf_gov = case_when(E069_11 == 4 ~ 1, #None at all
+                              E069_11 == 3 ~ 2,
+                              E069_11 == 2 ~ 3,
+                              E069_11 == 1 ~ 4), #A great deal
+         conf_just = case_when(E069_17 == 4 ~ 1, #None at all
+                               E069_17 == 3 ~ 2,
+                               E069_17 == 2 ~ 3,
+                               E069_17 == 1 ~ 4)) %>%  #A great deal
+  purrr::modify_at(c("sat_dem", 'extent_corr', 'conf_gov', 'conf_just'), 
+                   factor) %>%
+  select(country, year, sat_dem, extent_corr, conf_gov, conf_just, survey) 
+
+
+#Convert some factors to numeric
+names(wvs)
+wvs %<>% mutate_at(c('year', 'sat_dem', 'extent_corr', 'conf_gov', 
+                     'conf_just'), as.numeric)
+```
+
+## LAPOP
+
+```{r}
+lapop <- read_dta("data/lapop/lapop.dta")
+
+lapop$country <- as.numeric(lapop$pais)
+
+lapop %<>%
+  mutate(country = recode(country,
+                          "1" = "Mexico",
+                          "2" = "Guatemala",
+                          "3" = "El Salvador",
+                          "4" = "Honduras",
+                          "5" = "Nicaragua",
+                          "6" = "Costa Rica",
+                          "7" = "Panama",
+                          "8" = "Colombia",
+                          "9" = "Ecuador",
+                          "10" = "Bolivia",
+                          "11" = "Peru",
+                          "12" = "Paraguay",
+                          "13" = "Chile",
+                          "14" = "Uruguay",
+                          "15" = "Brazil",
+                          "16" = "Venezuela",
+                          "17" = "Argentina",
+                          "21" = "Dominican Republic",
+                          "22" = "Haiti",
+                          "23" = "Jamaica",
+                          "24" = "Guyana",
+                          "25" = "Trinidad and Tobago",
+                          "26" = "Belize",
+                          "27" = "Surinam",
+                          "28" = "Bahamas",
+                          "29" = "Barbados",
+                          "40" = "USA",
+                          "41" = "Canada"))
+lapop$survey <- 'lapop'
+
+lapop %<>%
+  mutate(sat_dem = case_when(pn4 == 4 ~ 1, #Muy insatisfecho(a)
+                             pn4 == 3 ~ 2,
+                             pn4 == 2 ~ 3,
+                             pn4 == 1 ~ 4), #Muy satisfecho(a)
+         extent_corr = case_when(pc2 == 10 ~ 1, # Muy honrados
+                                 pc2 == 9 ~ 1,
+                                 pc2 == 8 ~ 1,
+                                 pc2 == 8 ~ 2,
+                                 pc2 == 6 ~ 2,
+                                 pc2 == 5 ~ 3,
+                                 pc2 == 4 ~ 3,
+                                 pc2 == 3 ~ 4,
+                                 pc2 == 2 ~ 4,
+                                 pc2 == 1 ~ 4), #Muy corruptos
+         conf_gov = case_when(b14 == 1 ~ 1, #Nada
+                              b14 == 2 ~ 1,
+                              b14 == 3 ~ 2,
+                              b14 == 4 ~ 2,
+                              b14 == 5 ~ 3,
+                              b14 == 6 ~ 4,
+                              b14 == 7 ~ 4), #Mucho
+         conf_just = case_when(b10a == 1 ~ 1, #None at all
+                               b10a == 2 ~ 1,
+                               b10a == 3 ~ 2,
+                               b10a == 4 ~ 2,
+                               b10a == 5 ~ 3,
+                               b10a == 6 ~ 4,
+                               b10a == 7 ~ 4)) %>%  #A great deal
+  purrr::modify_at(c("sat_dem", 'extent_corr', 'conf_gov', 'conf_just'), 
+                   factor) %>%
+  select(country, year, sat_dem, extent_corr, conf_gov, conf_just, survey) 
+
+#Convert some factors to numeric
+names(lapop)
+lapop %<>% mutate_at(c('year', 'sat_dem', 'extent_corr', 'conf_gov', 
+                     'conf_just'), as.numeric)
+```
+
+## Latinobarometer
+
+```{r}
+# Set the range of years
+years <- c(2010, 2011, 2013, 2015:2018, 2020)
+
+# Create an empty list to store the data
+latinobarometer <- list()
+
+# Loop through the years
+for (year in years) {
+  
+  # Load the data for the current year
+  filename <- paste0("/Users/fran/Documents/PhD/1_Research/transitional-justice/tj-corruption-project/data/latino-barometer/", year, "_Latinobarometro_English.dta")
+  data <- read_dta(filename)
+  
+  # Store the data in the list
+  latinobarometer[[year]] <- data
+}
+```
+
+## Join databases
+
+```{r}
+surveys_all <- full_join(afrobarometer_final, arab_barometer_final)
+surveys_all <- full_join(surveys_all, asiabarometer_final)
+surveys_all <- full_join(surveys_all, wvs)
+surveys_all <- full_join(surveys_all, lapop)
+```
+
+### Modify database to long format
+
+```{r}
+surveys_long_raw <- surveys_all %>% 
+  gather(attribute, response, -country, -year, -survey)
+
+# Create a new variable "sample" using group_by and summarise
+surveys_long <- surveys_long_raw %>%
+  group_by(country, year, attribute, response, survey) %>%
+  summarise(sample = n())
+
+# Create a new variable "sample_survey" using group_by and summarise
+surveys_long_sample_survey <- surveys_all %>%
+  group_by(country, year) %>%
+  summarise(sample_survey = n())
+
+# Join the sample_survey variable to the original one
+surveys_long %<>%
+  left_join(surveys_long_sample_survey, by = c("country", "year")) %>%
+  filter(!is.na(response))
+
+# Create a new variable "proportion" by dividing the number of responses for each attribute by the sample size
+surveys_long$response_prop <- surveys_long$sample / surveys_long$sample_survey
+
+# Keep only 4 response alternative
+surveys_long_filtered <- surveys_long %>%
+  filter(response == 4)
+
+# Save both long and filtered format
+save(surveys_long, file = "surveys_long.RData")
+save(surveys_long_filtered, file = "surveys_long_filtered.RData")
+```

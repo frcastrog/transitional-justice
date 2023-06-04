@@ -1,0 +1,642 @@
+---
+title: "Bayesian latent variable model"
+author: "Francisca Castro"
+date: "2023-02-08"
+output: html_document
+---
+
+# Setting things up
+```{r message=FALSE, warning=FALSE}
+pacman::p_load(arm, dplyr, tidyr, loo, ggplot2, bayesplot, cmdstanr, readxl, writexl, xlsx)
+```
+
+
+# Gathering data
+You should gather nationally aggregated survey data on your topic of interest and organise it in “long” format, where each row in the dataset indicates a unique country-year-survey item combination. The output below illustrates using the first few rows of the support for democracy dataset (available here)
+
+```{r}
+data <- surveys_long_filtered
+head(data)
+```
+
+
+Next, we set some cmdstanr options, set the local folder (this will not work outside of RStudio) and load the survey data
+```{r}
+# options
+options("cmdstanr_verbose" = TRUE)
+options(mc.cores = parallel::detectCores())
+
+# folders
+WD = rstudioapi::getActiveDocumentContext()$path 
+setwd(dirname(WD))
+print( getwd() )
+```
+
+An unique item-country indicator, ItemCnt, is created – this is necessary to estimate the model. The initial year, year0, variable should also be set. Since the support for democracy data starts in 1995 (for certain countries), we set this to the year immediately before, 1994
+```{r}
+# order
+data = arrange(data, country, year)
+
+# create vector of response counts if they do not exist
+data$RespN = round(data$response*data$sample)
+
+# set first year
+year0 = 1980 # = year before first year of available survey data
+data = data[data$year > year0,]
+
+# create item by country indicators
+data = unite(data, ItemCnt, c(attribute, country), sep = "_", remove = FALSE)
+```
+
+The dynamic Bayesian latent variable model adjusts for the bias induced by the usage of particular items in particular countries, i.e., item non-equivalence. This requires items to be employed more than once per country. It is then desirable to drop items which are only fielded once. This is accomplished as follows:
+```{r}
+# identify single-year items
+(tab1 = table(data$attribute, data$year))
+(tab2 = sort(rowSums(tab1 > 0)))
+
+# drop single-year items
+dropvars = names(tab2[tab2==1])
+data1 = data[!(data$attribute %in% dropvars),]
+data1 = data
+
+#### New code 17 Feb
+# remove NAs
+supdem = supdem[!supdem$Response==0, ]
+
+# order
+supdem = arrange(supdem, Country, Year)
+
+# create vector of response counts if they do not exist
+data$RespN = round(data$response*data$sample)
+
+# set first year
+year0 = 1980 # = year before first year of available survey data
+data = data[data$year > year0,]
+
+# create item by country indicators
+data = unite(data, ItemCnt, c(response, country), sep = "_", remove = FALSE)
+data2 = data
+```
+
+It may also be desirable to estimate mood only for countries which have been surveyed a certain number of times. The following code identifies and drops countries for which only one year of survey measures are available. This can be edited by changing the number in the cnt.obs.years > 1 statement.
+```{r}
+# identify countries with few years of data
+cnt.obs.years = rowSums(table(data1$country, data1$year) > 0)
+sort(cnt.obs.years)
+
+# run the next line to drop countries with less than 2 years of data
+data1 = data1[data1$country %in% levels(data1$country)[cnt.obs.years > 1], ]
+```
+
+Prepare data for stan
+```{r}
+# factorise
+data1$country = as.factor(as.character(data1$country))
+data1$item = as.factor(as.character(data1$item))
+data1$ItemCnt = as.factor(as.character(data1$ItemCnt))
+data1$project = as.factor(as.character(data1$survey))
+data1$year = data1$year-year0
+
+# extract data
+n.items = length(unique(data1$item))
+n.cntrys = length(unique(data1$country))
+n.yrs = 2023-year0 # estimates up to 2022
+n.resp = dim(data1)[1]
+n.itm.cnt = length(unique(data1$ItemCnt))
+cntrys = as.numeric(factor(data1$country))
+cnt.names = levels(data1$country)
+items = as.numeric(factor(data1$item))
+yrs = data1$year
+itm.cnts = as.numeric(factor(data1$ItemCnt))
+mean.resp.log = logit(mean(data1$response_prop))
+
+# create item-country length indicator for items
+item.ind.kp = rep(0, length(levels(data1$ItemCnt)))
+for(i in 1:length(levels(data1$item))) {
+  item.ind.kp[grepl(levels(data1$item)[i], levels(data1$ItemCnt))] = i
+}
+item.ind.len = sapply(lapply(levels(data1$item), function(x) grep(x, levels(data1$ItemCnt))), length)
+```
+
+Assemble the bits of data into the list format which is preferred by cmdstanr, checking that there are no missing values and other errors:
+```{r}
+# specify data for stan
+dat.1 = list(N=n.resp, K=n.items, T=n.yrs, J=n.cntrys, P=n.itm.cnt, jj=cntrys, tt=yrs, 
+             pp=itm.cnts, kk=items, it_len=item.ind.len, 
+             x=data1$RespN, samp=data1$sample, mn_resp_log=mean.resp.log)
+sapply(dat.1, summary)
+```
+
+# Fitting the model
+Before fitting the model, we need to specify the parameters which are to be tracked and saved in the posterior draws. The names of these correspond with the notation used in the model description in Claassen (2019). The latent mood estimates, which are probably the parameters of most interest, are labeled theta.
+```{r}
+# parameters to save 
+pars.1 = c("Sigma","Omega","sigma_delta","sigma_theta","phi","mu_lambda","lambda","gamm","delta",
+           "theta","x_pred","log_lik")
+```
+
+The code specifies that 4 chains are to be run with 1000 iterations each, the first 500 of which are used to “warm up” the MCMC algorithms. This should be sufficient for convergence. However, I would suggest testing first with a small number of interations, e.g., 10, because 1000 iterations may take 15 minutes or more (depending on your data and computer hardware).
+```{r}
+# iterations for MCMC simulation
+n.iter = 1000
+n.warm = 500
+n.samp = n.iter - n.warm
+n.chn = 4
+```
+
+We then compile and run the model, using the lists of data and parameters we have just specified, as well as the Stan model (which is provided in a separate file, stan_mod6_v6.stan).
+
+The control parameters, adapt_delta and max_treedepth are set higher than their default values of 0.80 and 10. You can adjust adapt_delta: lower to speed up the sampling; higher if divergences are reported. See here for more detail.
+```{r message=FALSE, warning=FALSE}
+install.packages("cmdstanr", repos = c("https://mc-stan.org/r-packages/", getOption("repos")))
+library(cmdstanr)
+
+install_cmdstan()
+check_cmdstan_toolchain(fix = TRUE)
+stan.mod = cmdstan_model("stan_mod6_v6.stan")
+
+# Stan fit
+fit.mod= stan.mod$sample(
+  data = dat.1,
+  chains = n.chn,
+  init = 1,
+  parallel_chains = n.chn,
+  iter_warmup = n.warm,
+  iter_sampling = n.samp,
+  refresh = round(n.iter/20, 0),
+  adapt_delta = 0.90, 
+  max_treedepth = 13,
+  save_warmup = FALSE
+)
+```
+
+## Checking convergence
+ 
+```{r}
+# Examine model fit
+res = fit.mod
+res$cmdstan_diagnose()
+res.tab = res$print(pars.1, max_rows=80, digits=3)
+sum = res$summary(pars.1)
+print(sum[order(sum$rhat, decreasing=TRUE), ], n=50)
+res_neff_ratio = neff_ratio(res)
+res_neff_ratio[order(res_neff_ratio, decreasing=FALSE)][1:50]
+```
+```{r}
+# traceplot
+tp.pars = c("Sigma[1,1]","Sigma[2,2]","Omega[1,2]","sigma_theta","sigma_delta",
+            "phi","delta[23]")
+tp = bayesplot::mcmc_trace(res$draws(tp.pars), size=0.3, np=nuts_params(res))
+tp
+```
+ 
+## Extract and save mood estimates
+```{r}
+theta.m.out = apply(res$draws("theta"), 3, as.vector)
+(theta.m.mean = mean(as.vector(theta.m.out)))
+(theta.m.sd = sd(as.vector(theta.m.out)))
+theta.m.std = (theta.m.out - theta.m.mean) / theta.m.sd # standardize
+theta.m.t = apply(theta.m.std, 1, function(x) t(x) )
+theta.pe = apply(theta.m.t, 1, mean)
+theta.u95 = apply(theta.m.t, 1, quantile, probs=c(0.975))
+theta.l95 = apply(theta.m.t, 1, quantile, probs=c(0.025))
+theta.sd = apply(theta.m.t, 1, sd)
+theta.m.df = data.frame(country=rep(cnt.names, each=n.yrs), 
+                        year=rep(1995:2021, times=n.cntrys), data=theta.pe, 
+                        data_u95=theta.u95, data_l95=theta.l95, data_sd=theta.sd)
+
+# remove estimates before first survey year and create a trimmed dataset
+first.yr = data.frame(country = levels(data1$country),
+                      First_yr = as.vector(by(data1, data1$country, 
+                                              function(x) min(as.numeric(x$year)) + year0)))
+
+theta.trim = merge(theta.m.df, first.yr, by="country", all.x=TRUE)
+
+cnts = theta.trim[theta.trim$year==1995, "country"]
+frst.yr = theta.trim[theta.trim$year==1995, "First_yr"]
+
+theta.trim$data_trim = theta.trim$data1
+#theta.trim$data_trim = ifelse(theta.trim$year < theta.trim$First_yr, NA, theta.trim$data_trim)
+#theta.trim = theta.trim[order(theta.trim$country, theta.trim$year), ]
+#theta.trim = theta.trim[!is.na(theta.trim$data_trim),]
+#theta.trim$data_trim = NULL
+
+# save country-year point estimates
+write.csv(theta.trim, "mood_est.csv", row.names=FALSE)
+```
+
+Small table with data to exemplify
+
+```{r}
+install.packages("data.table")
+library(data.table)
+set.seed(10)
+
+data_table <- data.table(data)
+data_table_example <- data_table[sample(.N, 7)]
+data_table_example
+```
+
+# For government trust
+
+# Gathering data
+You should gather nationally aggregated survey data on your topic of interest and organise it in “long” format, where each row in the dataset indicates a unique country-year-survey item combination. The output below illustrates using the first few rows of the support for democracy dataset (available here)
+
+```{r}
+data <- read_excel("conf_gov_final.xlsx")
+data <- na.omit(data)
+class(data$year)
+head(data)
+```
+
+
+Next, we set some cmdstanr options, set the local folder (this will not work outside of RStudio) and load the survey data
+```{r}
+# options
+options("cmdstanr_verbose" = TRUE)
+options(mc.cores = parallel::detectCores())
+
+# folders
+WD = rstudioapi::getActiveDocumentContext()$path 
+setwd(dirname(WD))
+print( getwd() )
+```
+
+An unique item-country indicator, ItemCnt, is created – this is necessary to estimate the model. The initial year, year0, variable should also be set. Since the support for democracy data starts in 1995 (for certain countries), we set this to the year immediately before, 1994
+```{r}
+# order
+data = arrange(data, country, year)
+
+# create vector of response counts if they do not exist
+data$RespN = round(data$response*data$sample)
+
+# set first year
+year0 = 1989 # = year before first year of available survey data
+data = data[data$year > year0,]
+
+# create item by country indicators
+data = unite(data, ItemCnt, c(item, country), sep = "_", remove = FALSE)
+```
+
+The dynamic Bayesian latent variable model adjusts for the bias induced by the usage of particular items in particular countries, i.e., item non-equivalence. This requires items to be employed more than once per country. It is then desirable to drop items which are only fielded once. This is accomplished as follows:
+```{r}
+# identify single-year items
+(tab1 = table(data$item, data$year))
+(tab2 = sort(rowSums(tab1 > 0)))
+
+# drop single-year items
+dropvars = names(tab2[tab2==1])
+data1 = data[!(data$item %in% dropvars),]
+data1 = data
+```
+
+It may also be desirable to estimate mood only for countries which have been surveyed a certain number of times. The following code identifies and drops countries for which only one year of survey measures are available. This can be edited by changing the number in the cnt.obs.years > 1 statement.
+```{r}
+# identify countries with few years of data
+cnt.obs.years = rowSums(table(data1$country, data1$year) > 0)
+sort(cnt.obs.years)
+
+# run the next line to drop countries with less than 2 years of data
+data2 = data1[data1$country %in% levels(data1$country)[cnt.obs.years > 1], ]
+```
+
+Prepare data for stan
+```{r}
+# factorise
+data1$country = as.factor(as.character(data1$country))
+data1$item = as.factor(as.character(data1$item))
+data1$ItemCnt = as.factor(as.character(data1$ItemCnt))
+data1$project = as.factor(as.character(data1$project))
+data1$year = data1$year-year0
+
+# extract data
+n.items = length(unique(data1$item))
+n.cntrys = length(unique(data1$country))
+n.yrs = 2021-year0 # estimates up to 2020
+n.resp = dim(data1)[1]
+n.itm.cnt = length(unique(data1$ItemCnt))
+cntrys = as.numeric(factor(data1$country))
+cnt.names = levels(data1$country)
+items = as.numeric(factor(data1$item))
+yrs = data1$year
+itm.cnts = as.numeric(factor(data1$ItemCnt))
+mean.resp.log = logit(mean(data1$response))
+
+# create item-country length indicator for items
+item.ind.kp = rep(0, length(levels(data1$ItemCnt)))
+
+for(i in 1:length(levels(data1$item))) {
+  item.ind.kp[grepl(levels(data1$item)[i], levels(data1$ItemCnt))] = i
+}
+
+item.ind.len = sapply(lapply(levels(data1$item), function(x) grep(x, levels(data1$ItemCnt))), length)
+```
+
+Assemble the bits of data into the list format which is preferred by cmdstanr, checking that there are no missing values and other errors:
+```{r}
+# specify data for stan
+dat.1 = list(N=n.resp, K=n.items, T=n.yrs, J=n.cntrys, P=n.itm.cnt, jj=cntrys, tt=yrs, 
+             pp=itm.cnts, kk=items, it_len=item.ind.len, 
+             x=data1$RespN, samp=data1$sample, mn_resp_log=mean.resp.log)
+sapply(dat.1, summary)
+```
+
+# Fitting the model
+Before fitting the model, we need to specify the parameters which are to be tracked and saved in the posterior draws. The names of these correspond with the notation used in the model description in Claassen (2019). The latent mood estimates, which are probably the parameters of most interest, are labeled theta.
+```{r}
+# parameters to save 
+pars.1 = c("Sigma","Omega","sigma_delta","sigma_theta","phi","mu_lambda","lambda","gamm","delta",
+           "theta","x_pred","log_lik")
+```
+
+The code specifies that 4 chains are to be run with 1000 iterations each, the first 500 of which are used to “warm up” the MCMC algorithms. This should be sufficient for convergence. However, I would suggest testing first with a small number of interations, e.g., 10, because 1000 iterations may take 15 minutes or more (depending on your data and computer hardware).
+```{r}
+# iterations for MCMC simulation
+n.iter = 1000
+n.warm = 500
+n.samp = n.iter - n.warm
+n.chn = 4
+```
+
+We then compile and run the model, using the lists of data and parameters we have just specified, as well as the Stan model (which is provided in a separate file, stan_mod6_v6.stan).
+
+The control parameters, adapt_delta and max_treedepth are set higher than their default values of 0.80 and 10. You can adjust adapt_delta: lower to speed up the sampling; higher if divergences are reported. See here for more detail.
+```{r message=FALSE, warning=FALSE}
+install.packages("cmdstanr", repos = c("https://mc-stan.org/r-packages/", getOption("repos")))
+library(cmdstanr)
+
+install_cmdstan()
+check_cmdstan_toolchain(fix = TRUE)
+stan.mod = cmdstan_model("stan_mod6_v6.stan")
+
+# Stan fit
+fit.mod= stan.mod$sample(
+  data = dat.1,
+  chains = n.chn,
+  init = 1,
+  parallel_chains = n.chn,
+  iter_warmup = n.warm,
+  iter_sampling = n.samp,
+  refresh = round(n.iter/20, 0),
+  adapt_delta = 0.95, 
+  max_treedepth = 13,
+  save_warmup = FALSE
+)
+```
+
+## Checking convergence
+ 
+```{r}
+# Examine model fit
+res = fit.mod
+res$cmdstan_diagnose()
+res.tab = res$print(pars.1, max_rows=80, digits=3)
+sum = res$summary(pars.1)
+print(sum[order(sum$rhat, decreasing=TRUE), ], n=50)
+res_neff_ratio = neff_ratio(res)
+res_neff_ratio[order(res_neff_ratio, decreasing=FALSE)][1:50]
+```
+```{r}
+# traceplot
+tp.pars = c("Sigma[1,1]","Sigma[2,2]","Omega[1,2]","sigma_theta","sigma_delta",
+            "phi","delta[23]")
+tp = bayesplot::mcmc_trace(res$draws(tp.pars), size=0.3, np=nuts_params(res))
+tp
+```
+ 
+## Extract and save mood estimates
+```{r}
+theta.m.out = apply(res$draws("theta"), 3, as.vector)
+(theta.m.mean = mean(as.vector(theta.m.out)))
+(theta.m.sd = sd(as.vector(theta.m.out)))
+theta.m.std = (theta.m.out - theta.m.mean) / theta.m.sd # standardize
+theta.m.t = apply(theta.m.std, 1, function(x) t(x) )
+theta.pe = apply(theta.m.t, 1, mean)
+theta.u95 = apply(theta.m.t, 1, quantile, probs=c(0.975))
+theta.l95 = apply(theta.m.t, 1, quantile, probs=c(0.025))
+theta.sd = apply(theta.m.t, 1, sd)
+theta.m.df = data.frame(country=rep(cnt.names, each=n.yrs), 
+                        year=rep(1990:2021, times=n.cntrys), data=theta.pe, 
+                        data_u95=theta.u95, data_l95=theta.l95, data_sd=theta.sd)
+
+# remove estimates before first survey year and create a trimmed dataset
+first.yr = data.frame(country = levels(data1$country),
+                      First_yr = as.vector(by(data1, data1$country, 
+                                              function(x) min(as.numeric(x$year)) + year0)))
+
+theta.trim = merge(theta.m.df, first.yr, by="country", all.x=TRUE)
+
+cnts = theta.trim[theta.trim$year==1995, "country"]
+frst.yr = theta.trim[theta.trim$year==1995, "First_yr"]
+
+theta.trim$data_trim = theta.trim$data1
+#theta.trim$data_trim = ifelse(theta.trim$year < theta.trim$First_yr, NA, theta.trim$data_trim)
+#theta.trim = theta.trim[order(theta.trim$country, theta.trim$year), ]
+#theta.trim = theta.trim[!is.na(theta.trim$data_trim),]
+#theta.trim$data_trim = NULL
+
+# save country-year point estimates
+write.csv(theta.trim, "confidence_government.csv", row.names=FALSE)
+```
+
+
+# For judiciary trust
+
+# Gathering data
+You should gather nationally aggregated survey data on your topic of interest and organise it in “long” format, where each row in the dataset indicates a unique country-year-survey item combination. The output below illustrates using the first few rows of the support for democracy dataset (available here)
+
+```{r}
+data <- read_excel("conf_just_final.xlsx")
+data <- na.omit(data)
+
+head(data)
+```
+
+
+Next, we set some cmdstanr options, set the local folder (this will not work outside of RStudio) and load the survey data
+```{r}
+# options
+options("cmdstanr_verbose" = TRUE)
+options(mc.cores = parallel::detectCores())
+
+# folders
+WD = rstudioapi::getActiveDocumentContext()$path 
+setwd(dirname(WD))
+print( getwd() )
+```
+
+An unique item-country indicator, ItemCnt, is created – this is necessary to estimate the model. The initial year, year0, variable should also be set. Since the support for democracy data starts in 1995 (for certain countries), we set this to the year immediately before, 1994
+```{r}
+# order
+data = arrange(data, country, year)
+
+# create vector of response counts if they do not exist
+data$RespN = round(data$response*data$sample)
+
+# set first year
+year0 = 1980 # = year before first year of available survey data
+data = data[data$year > year0,]
+
+# create item by country indicators
+data = unite(data, ItemCnt, c(item, country), sep = "_", remove = FALSE)
+```
+
+The dynamic Bayesian latent variable model adjusts for the bias induced by the usage of particular items in particular countries, i.e., item non-equivalence. This requires items to be employed more than once per country. It is then desirable to drop items which are only fielded once. This is accomplished as follows:
+```{r}
+# identify single-year items
+(tab1 = table(data$item, data$year))
+(tab2 = sort(rowSums(tab1 > 0)))
+
+# drop single-year items
+dropvars = names(tab2[tab2==1])
+data1 = data[!(data$item %in% dropvars),]
+data1 = data
+```
+
+It may also be desirable to estimate mood only for countries which have been surveyed a certain number of times. The following code identifies and drops countries for which only one year of survey measures are available. This can be edited by changing the number in the cnt.obs.years > 1 statement.
+```{r}
+# identify countries with few years of data
+cnt.obs.years = rowSums(table(data1$country, data1$year) > 0)
+sort(cnt.obs.years)
+
+# run the next line to drop countries with less than 2 years of data
+data2 = data1[data1$country %in% levels(data1$country)[cnt.obs.years > 1], ]
+```
+
+Prepare data for stan
+```{r}
+# factorise
+data1$country = as.factor(as.character(data1$country))
+data1$item = as.factor(as.character(data1$item))
+data1$ItemCnt = as.factor(as.character(data1$ItemCnt))
+data1$project = as.factor(as.character(data1$project))
+data1$year = data1$year-year0
+
+# extract data
+n.items = length(unique(data1$item))
+n.cntrys = length(unique(data1$country))
+n.yrs = 2021-year0 # estimates up to 2020
+n.resp = dim(data1)[1]
+n.itm.cnt = length(unique(data1$ItemCnt))
+cntrys = as.numeric(factor(data1$country))
+cnt.names = levels(data1$country)
+items = as.numeric(factor(data1$item))
+yrs = data1$year
+itm.cnts = as.numeric(factor(data1$ItemCnt))
+mean.resp.log = logit(mean(data1$response))
+
+# create item-country length indicator for items
+item.ind.kp = rep(0, length(levels(data1$ItemCnt)))
+for(i in 1:length(levels(data1$item))) {
+  item.ind.kp[grepl(levels(data1$item)[i], levels(data1$ItemCnt))] = i
+}
+item.ind.len = sapply(lapply(levels(data1$item), function(x) grep(x, levels(data1$ItemCnt))), length)
+```
+
+Assemble the bits of data into the list format which is preferred by cmdstanr, checking that there are no missing values and other errors:
+```{r}
+# specify data for stan
+dat.1 = list(N=n.resp, K=n.items, T=n.yrs, J=n.cntrys, P=n.itm.cnt, jj=cntrys, tt=yrs, 
+             pp=itm.cnts, kk=items, it_len=item.ind.len, 
+             x=data1$RespN, samp=data1$sample, mn_resp_log=mean.resp.log)
+sapply(dat.1, summary)
+```
+
+# Fitting the model
+Before fitting the model, we need to specify the parameters which are to be tracked and saved in the posterior draws. The names of these correspond with the notation used in the model description in Claassen (2019). The latent mood estimates, which are probably the parameters of most interest, are labeled theta.
+```{r}
+# parameters to save 
+pars.1 = c("Sigma","Omega","sigma_delta","sigma_theta","phi","mu_lambda","lambda","gamm","delta",
+           "theta","x_pred","log_lik")
+```
+
+The code specifies that 4 chains are to be run with 1000 iterations each, the first 500 of which are used to “warm up” the MCMC algorithms. This should be sufficient for convergence. However, I would suggest testing first with a small number of interations, e.g., 10, because 1000 iterations may take 15 minutes or more (depending on your data and computer hardware).
+```{r}
+# iterations for MCMC simulation
+n.iter = 1000
+n.warm = 500
+n.samp = n.iter - n.warm
+n.chn = 4
+```
+
+We then compile and run the model, using the lists of data and parameters we have just specified, as well as the Stan model (which is provided in a separate file, stan_mod6_v6.stan).
+
+The control parameters, adapt_delta and max_treedepth are set higher than their default values of 0.80 and 10. You can adjust adapt_delta: lower to speed up the sampling; higher if divergences are reported. See here for more detail.
+```{r message=FALSE, warning=FALSE}
+install.packages("cmdstanr", repos = c("https://mc-stan.org/r-packages/", getOption("repos")))
+library(cmdstanr)
+
+install_cmdstan()
+check_cmdstan_toolchain(fix = TRUE)
+stan.mod = cmdstan_model("stan_mod6_v6.stan")
+
+# Stan fit
+fit.mod= stan.mod$sample(
+  data = dat.1,
+  chains = n.chn,
+  init = 1,
+  parallel_chains = n.chn,
+  iter_warmup = n.warm,
+  iter_sampling = n.samp,
+  refresh = round(n.iter/20, 0),
+  adapt_delta = 0.95, 
+  max_treedepth = 13,
+  save_warmup = FALSE
+)
+```
+
+## Checking convergence
+ 
+```{r}
+# Examine model fit
+res = fit.mod
+res$cmdstan_diagnose()
+res.tab = res$print(pars.1, max_rows=80, digits=3)
+sum = res$summary(pars.1)
+print(sum[order(sum$rhat, decreasing=TRUE), ], n=50)
+res_neff_ratio = neff_ratio(res)
+res_neff_ratio[order(res_neff_ratio, decreasing=FALSE)][1:50]
+```
+```{r}
+# traceplot
+tp.pars = c("Sigma[1,1]","Sigma[2,2]","Omega[1,2]","sigma_theta","sigma_delta",
+            "phi","delta[23]")
+tp = bayesplot::mcmc_trace(res$draws(tp.pars), size=0.3, np=nuts_params(res))
+tp
+```
+ 
+## Extract and save mood estimates
+```{r}
+theta.m.out = apply(res$draws("theta"), 3, as.vector)
+(theta.m.mean = mean(as.vector(theta.m.out)))
+(theta.m.sd = sd(as.vector(theta.m.out)))
+theta.m.std = (theta.m.out - theta.m.mean) / theta.m.sd # standardize
+theta.m.t = apply(theta.m.std, 1, function(x) t(x) )
+theta.pe = apply(theta.m.t, 1, mean)
+theta.u95 = apply(theta.m.t, 1, quantile, probs=c(0.975))
+theta.l95 = apply(theta.m.t, 1, quantile, probs=c(0.025))
+theta.sd = apply(theta.m.t, 1, sd)
+theta.m.df = data.frame(country=rep(cnt.names, each=n.yrs), 
+                        year=rep(1981:2021, times=n.cntrys), data=theta.pe, 
+                        data_u95=theta.u95, data_l95=theta.l95, data_sd=theta.sd)
+
+# remove estimates before first survey year and create a trimmed dataset
+first.yr = data.frame(country = levels(data1$country),
+                      First_yr = as.vector(by(data1, data1$country, 
+                                              function(x) min(as.numeric(x$year)) + year0)))
+
+theta.trim = merge(theta.m.df, first.yr, by="country", all.x=TRUE)
+
+cnts = theta.trim[theta.trim$year==1995, "country"]
+frst.yr = theta.trim[theta.trim$year==1995, "First_yr"]
+
+theta.trim$data_trim = theta.trim$data1
+#theta.trim$data_trim = ifelse(theta.trim$year < theta.trim$First_yr, NA, theta.trim$data_trim)
+#theta.trim = theta.trim[order(theta.trim$country, theta.trim$year), ]
+#theta.trim = theta.trim[!is.na(theta.trim$data_trim),]
+#theta.trim$data_trim = NULL
+
+# save country-year point estimates
+write.csv(theta.trim, "confidence_jud.csv", row.names=FALSE)
+```
+

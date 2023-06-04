@@ -1,0 +1,4103 @@
+---
+title: "TJ R Project"
+author: "Francisca Castro"
+date: "4/28/2022"
+output: html_document
+---
+
+# Packages Installation
+```{r message=FALSE, warning=FALSE}
+pacman::p_load(readxl, tidyverse, dplyr, readr, BBmisc, xlsx, haven,
+               formattable, writexl, countrycode, panelView, countrycode)
+```
+
+# Load TJ data
+
+```{r}
+# Panel View - Figure 2 of manuscript
+db_final <- read_excel("db_final_220527.xlsx")
+
+# Subset inclusion_final_db == 1
+db_subset <- db_final %>%
+  filter(inclusion_final_db == 1)
+
+# Use TJ_filtered instead but create a binary regime variable
+tj_filtered$regime_binary <- NA
+
+tj_filtered$regime_binary[tj_filtered$regime_polity5 == "democracy"] <- "partial_or_dem"
+tj_filtered$regime_binary[tj_filtered$regime_polity5 == "partial democracy"] <- "partial_or_dem"
+
+# Create figure
+panel_figure_manuscript <- panelview(transition ~ treated, 
+                                     data = tj_filtered,
+                                     index = c("country", "year"), main = "",
+                                     axis.lab.gap = c(2,0), xlab="", ylab="",
+                                     legend.labs = c("Partial Democracy/Democracy", 
+                                                     "TJ Implementations", 
+                                                     "Non-democracy")) + 
+  theme_minimal() +
+  theme(legend.title = element_blank(), legend.position = c("bottom"),
+        plot.title = element_text(hjust = 0.5))
+
+tj_filtered <- subset(tj_filtered, country!= "Turkey")
+
+
+panel_figure_manuscript
+
+
+# Subset db_final to get a figure that fits into beamer (only for presentations)
+tj_filtered_subset <- tj_filtered %>%
+  filter(country %in% c("Argentina", "Bolivia", "Burkina Faso", "DR Congo",
+                      "El Salvador", "Ethiopia", "Guinea", "Kenya", "Macedonia",
+                      "Mozambique", "Niger", "Panama", "Romania", "Senegal",
+                      "Tanzania", "Zimbabwe")) 
+
+panel_figure2 <- panelview(transition ~ treated, data = tj_filtered_subset,
+                       index = c("country", "year"), main = "",
+                       axis.lab.gap = c(2,0), xlab="", ylab="",
+           legend.labs = c("Partial Democracy/Democracy", 
+                                                     "TJ Implementations", 
+                                                     "Non-democracy")) +
+   theme_minimal() +
+   theme(legend.title = element_blank(),
+         legend.position = c("bottom"),
+         plot.title = element_text(hjust = 0.5))
+panel_figure2
+```
+
+# Load TJ dataset
+```{r}
+tj <- read_excel("~/Documents/PhD/1_Research/9. Transitional justice/Data/Data 2022/tj_db_220425.xlsx")
+
+table(tj$country)
+```
+
+# WVS
+
+```{r}
+load("~/Documents/PhD/1_Research/9. Transitional justice/Data/Data 2022/TJ R Project/Data bases/WVS/WVS_TimeSeries_1981_2022_Rdata_v3_0.rdata")
+
+wvs_full <- WVS_TimeSeries_1981_2022_spss_v3_0
+rm(WVS_TimeSeries_1981_2022_spss_v3_0)
+
+head(wvs_full)
+```
+Add country names
+```{r}
+wvs_full$country <- NA
+wvs_full$year <- wvs_full$S020
+wvs_full$ccode <- wvs_full$COW_NUM
+
+wvs_full$country <- countrycode(wvs_full$COUNTRY_ALPHA, origin = "iso3c",
+                             destination = "country.name", warn = TRUE)
+
+wvs_full <- relocate(wvs_full, country)
+head(wvs_full)
+```
+
+Select only variables that matter
+```{r}
+wvs_filter <- wvs_full %>%
+  select(c(country, year, ccode, COUNTRY_ALPHA, COW_ALPHA, 
+           E196, E268, E269, E069_11, E069_17, E110))
+
+rm(wvs_full)
+head(wvs_filter)
+```
+
+
+Specific questions to keep
+E196 - Extent of political corruption
+How widespread do you think bride taking and corruption is in this country?
+1  Almost no public officials engaged in it
+2  A few are
+3  Most are
+4  Almost all public officials are engaged in it
+-1  Don´t know
+-2  No answer
+-4  Not asked
+
+E268 - Scale corruption in [my country] - pay a bribe, give a gift, do a favor to other to get things
+1  There is no corruption in [my country]
+2  2
+3  3
+4  4
+5  5
+6  6
+7  7
+8  8
+9  9
+10  There is abundant corruption in [my country]
+-1  Don´t know
+-2  No answer
+-3  Not applicable
+-4  Not asked
+-5  Missing; Not available
+
+E269 - Groups of people involved in corruption: State authorities
+1  None of them
+2  Few of them
+3  Most of them
+4  All of them
+-1  Don´t know
+-2  No answer
+-4  Not asked
+-5  Missing; Not available
+
+E069_11 - Confidence: The Government
+1  A great deal
+2  Quite a lot
+3  Not very much
+4  None at all
+-1  Don´t know
+-2  No answer
+-4  Not asked
+-5  Missing; Unknown
+
+E069_17 - Confidence: Justice System/Courts
+1  A great deal
+2  Quite a lot
+3  Not very much
+4  None at all
+-1  Don´t know
+-2  No answer
+-4  Not asked
+-5  Missing; Unknown
+
+E110 - Satisfaction with the way democracy develops
+1  Very satisfied
+2  Rather satisfied
+3  Not very satisfied
+4  Not at all satisfied
+-1  Don´t know
+-2  No answer
+-4  Not asked
+-5  Missing; Unknown
+
+
+```{r}
+wvs_clean <- 
+  wvs_filter %>% 
+  mutate(E196 = replace(E196, E196 <= 0, NA),
+         E268 = replace(E268, E268 <= 0, NA),
+         E269 = replace(E269, E269 <= 0, NA),
+         E069_11 = replace(E069_11, E069_11 <= 0, NA),
+         E069_17 = replace(E069_17, E069_17 <= 0, NA),
+         E110 = replace(E110, E110 <= 0, NA))
+
+# Recode variable so they go from less to more: E069_11, E069_17, E110
+wvs_clean$conf_gov <- recode(wvs_clean$E069_11,
+                      "4" = 1,
+                      "3" = 2,
+                      "2" = 3,
+                      "1" = 4) 
+
+wvs_clean$conf_just <- recode(wvs_clean$E069_17,
+                      "4" = 1,
+                      "3" = 2,
+                      "2" = 3,
+                      "1" = 4) 
+
+wvs_clean$sat_dem <- recode(wvs_clean$E110,
+                      "4" = 1,
+                      "3" = 2,
+                      "2" = 3,
+                      "1" = 4) 
+
+```
+
+E196 - Extent of political corruption
+How widespread do you think bride taking and corruption is in this country?
+1  Almost no public officials engaged in it
+2  A few are
+3  Most are
+4  Almost all public officials are engaged in it
+
+```{r}
+table(wvs_clean$country, wvs_clean$E196)
+
+wvs_extent_corruption <- wvs_clean %>%
+  group_by(country, year,  ccode, E196) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_extent_corr = round(cnt / sum(cnt), 3))
+```
+
+E268 - Scale corruption in [my country] - pay a bribe, give a gift, do a favor to other to get things
+1  There is no corruption in [my country]
+2  2
+3  3
+4  4
+5  5
+6  6
+7  7
+8  8
+9  9
+10  There is abundant corruption in [my country]
+```{r}
+table(wvs_clean$country, wvs_clean$E268)
+```
+```{r}
+#Recategorize into 4 categories
+# 1-3 = 1
+# 4-5 = 2
+# 6-7 = 3
+# 8-10 = 4}
+
+wvs_clean$scale_corruption <- 0
+wvs_clean$scale_corruption <- recode(wvs_clean$E268,
+                                      "1" = 1,
+                                      "2" = 1,
+                                      "3" = 1,
+                                      "4" = 2,
+                                      "5" = 2,
+                                      "6" = 3,
+                                      "7" = 3,
+                                      "8" = 4,
+                                      "9" = 4,
+                                      "10" = 4) 
+
+wvs_scale_corruption <- wvs_clean %>%
+  group_by(country, year, ccode, scale_corruption) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_scale_corr = round(cnt / sum(cnt), 3))
+```
+
+E269 - Groups of people involved in corruption: State authorities
+1  None of them
+2  Few of them
+3  Most of them
+4  All of them
+```{r}
+table(wvs_clean$country, wvs_clean$E269)
+```
+```{r}
+wvs_groups_corruption <- wvs_clean %>%
+  group_by(country, year, ccode, E269) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_groups_corr = round(cnt / sum(cnt), 3))
+```
+
+conf_gov - Confidence: The Government
+1 None at all 
+2 Not very much  
+3 Quite a lot
+4 A great deal
+```{r}
+table(wvs_clean$country, wvs_clean$conf_gov)
+```
+```{r}
+wvs_conf_gov <- wvs_clean %>%
+  group_by(country, year, ccode, conf_gov) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_gov = round(cnt / sum(cnt), 3))
+
+wvs_conf_just <- wvs_clean %>%
+  group_by(country, year, ccode, conf_just) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_just = round(cnt / sum(cnt), 3))
+
+wvs_sat_dem <- wvs_clean %>%
+  group_by(country, year, ccode, sat_dem) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_sat_dem = round(cnt / sum(cnt), 3))
+```
+
+Join WVS data
+```{r}
+wvs_conf_gov$year <- as.numeric(wvs_conf_gov$year)
+wvs_conf_just$year <- as.numeric(wvs_conf_just$year)
+wvs_extent_corruption$year <- as.numeric(wvs_extent_corruption$year)
+wvs_groups_corruption$year <- as.numeric(wvs_groups_corruption$year)
+wvs_sat_dem$year <- as.numeric(wvs_sat_dem$year)
+wvs_scale_corruption$year <- as.numeric(wvs_scale_corruption$year)
+
+wvs_conf_gov <- rename(wvs_conf_gov, scale = conf_gov)
+wvs_conf_just <- rename(wvs_conf_just, scale = conf_just)
+wvs_extent_corruption <- rename(wvs_extent_corruption, scale = E196)
+wvs_groups_corruption <- rename(wvs_groups_corruption, scale = E269)
+wvs_sat_dem <- rename(wvs_sat_dem, scale = sat_dem)
+wvs_scale_corruption <- rename(wvs_scale_corruption, scale = scale_corruption)
+
+wvs_final <- wvs_conf_gov %>%
+  full_join(wvs_conf_just, by = c("country", "year", "ccode", "scale"))
+
+wvs_final <- wvs_final %>%
+  full_join(wvs_extent_corruption, by = c("country", "year", "ccode", "scale")) 
+
+wvs_final <- wvs_final %>%
+  full_join(wvs_groups_corruption, by = c("country", "year", "ccode", "scale")) 
+
+wvs_final <- wvs_final %>%
+  full_join(wvs_sat_dem, by = c("country", "year", "ccode", "scale")) 
+
+wvs_final <- wvs_final %>%
+  full_join(wvs_scale_corruption, by = c("country", "year", "ccode", "scale")) 
+
+wvs_final <- select(wvs_final, -c(cnt.x, cnt.y, cnt.x.x, cnt.y.y,
+                                  cnt.x.x.x, cnt.y.y.y))
+
+openxlsx::write.xlsx(wvs_final, file = "wvs_final.xlsx",  keepNA = TRUE)
+```
+
+# Arab barometer
+
+Wave 1
+
+q253 - Here are some statements that describe how
+widespread corruption and bribe taking are in
+all sectors in [respondent’s country]. Which of
+the following statements reflects your own
+opinion the best?
+1 = Hardly anyone is involved in corruption
+ and bribery
+2 = Not a lot of officials are corrupt
+3 = Most officials are corrupt
+4 = Almost everyone is corrupt
+98 = Can’t Choose/Don’t know
+99 = Decline to Answer
+
+q254 - In your opinion, to what extent is the
+government working to crackdown on
+corruption and root out bribes?
+1 = To a large extent
+2 = To a medium extent
+3 = To a small extent
+4 = Not at all
+97 = Not clear
+98 = Can’t Choose/Don’t know
+99 = Decline to Answer
+
+I’m going to name a number of institutions. For each one, please tell me how much trust you have in them. Is it a great deal of trust, quite a lot of trust, not very much trust, or none at all?
+q2011 - the prime minister
+q2012 - the courts
+1 = A great deal of trust
+2 = Quite a lot of trust
+3 = Not very much trust
+4 = None at all
+98 = Can’t Choose/Don’t know
+99 = Decline to Answer
+
+q244 - Using a similar 10-point scale, where 1 means
+very unsatisfied and 10 means very satisfied,
+indicate how satisfied you are with the
+performance of the current [respondent’s
+country] government
+1 = Very unsatisfied
+2 3 4 5 6 7 8 9
+10 = Very satisfied
+96 = Not important
+97 = Not clear
+98 = Can’t choose/Don’t know
+
+```{r}
+arab_wave1 <- read_csv("Data bases/Arab Barometer/wave1.csv")
+
+arab_wave1$conf_gov <- recode(arab_wave1$q2011,
+                             "none at all" = 1,
+                             "not very much trust" = 2,
+                             "quite a lot of trust" = 3,
+                             "a great deal of trust" = 4)
+
+#Create years
+arab_wave1$year <- 0
+
+arab_wave1$year[arab_wave1$country == "algeria"] <- "2006"
+arab_wave1$year[arab_wave1$country == "bahrain"] <- "2009"
+arab_wave1$year[arab_wave1$country == "jordan"] <- "2006"
+arab_wave1$year[arab_wave1$country == "lebanon"] <- "2006"
+arab_wave1$year[arab_wave1$country == "morocco"] <- "2007"
+arab_wave1$year[arab_wave1$country == "palestine"] <- "2006"
+arab_wave1$year[arab_wave1$country == "yemen"] <- "2007"
+
+arab_wave1$country[arab_wave1$country == "algeria"] <- "Algeria"
+arab_wave1$country[arab_wave1$country == "bahrain"] <- "Bahrain" 
+arab_wave1$country[arab_wave1$country == "jordan"] <- "Jordan"
+arab_wave1$country[arab_wave1$country == "lebanon"] <- "Lebanon" 
+arab_wave1$country[arab_wave1$country == "morocco"] <- "Morocco" 
+arab_wave1$country[arab_wave1$country == "palestine"] <- "Palestine"
+arab_wave1$country[arab_wave1$country == "yemen"] <- "Yemen"
+
+# Add country code
+arab_wave1$ccode <- NA
+arab_wave1$ccode <- countrycode(arab_wave1$country, origin = "country.name",
+                             destination = "cown", warn = TRUE)
+
+arab_wave1$conf_just <- recode(arab_wave1$q2012,
+                             "none at all" = 1,
+                             "not very much trust" = 2,
+                             "quite a lot of trust" = 3,
+                             "a great deal of trust" = 4)
+
+arab_wave1$fight_corruption <- recode(arab_wave1$q254,
+                             "not at all" = 1,
+                             "to a small extent" = 2,
+                             "to a medium extent" = 3,
+                             "to a large extent" = 4)
+
+arab_wave1$groups_corruption <- recode(arab_wave1$q253,
+                             "hardly anyone is involved in corruption and bribery" = 1,
+                             "not a lot of officials are corrupt" = 2,
+                             "most officials are corrupt" = 3,
+                             "almost everyone is corrupt" = 4)
+
+# As WVS
+#1  Not at all satisfied
+#2  Not very satisfied
+#3  Rather satisfied
+#4  Very satisfied
+arab_wave1$sat_dem <- recode(arab_wave1$q244,
+                             "completely unsatisfied" = 1,
+                             "2" = 1,
+                             "3" = 1,
+                             "4" = 2,
+                             "5" = 2,
+                             "6" = 3,
+                             "7" = 3,
+                             "8" = 4,
+                             "9" = 4,
+                             "completely satisfied" = 4)
+
+arab_w1_conf_gov <- arab_wave1 %>%
+  group_by(country, year, ccode, conf_gov) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_gov = round(cnt / sum(cnt), 3))
+
+arab_w1_conf_just <- arab_wave1 %>%
+  group_by(country, year, ccode, conf_just) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_just = round(cnt / sum(cnt), 3))
+
+arab_w1_fight_corruption<- arab_wave1 %>%
+  group_by(country, year, ccode, fight_corruption) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_fight_corr = round(cnt / sum(cnt), 3))
+
+arab_w1_groups_corruption <- arab_wave1 %>%
+  group_by(country, year, ccode, groups_corruption) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_groups_corr = round(cnt / sum(cnt), 3))
+
+arab_w1_sat_dem <- arab_wave1 %>%
+  group_by(country, year, ccode, sat_dem) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_sat_dem = round(cnt / sum(cnt), 3))
+
+arab_w1_conf_gov <- rename(arab_w1_conf_gov, scale = conf_gov)
+arab_w1_conf_just <- rename(arab_w1_conf_just, scale = conf_just)
+arab_w1_fight_corruption <- rename(arab_w1_fight_corruption, scale = fight_corruption)
+arab_w1_groups_corruption <- rename(arab_w1_groups_corruption, scale = groups_corruption)
+arab_w1_sat_dem <- rename(arab_w1_sat_dem, scale = sat_dem)
+
+arab_w1_final <- arab_w1_conf_gov %>%
+  full_join(arab_w1_conf_just, by = c("country", "year", "ccode", "scale"))
+
+arab_w1_final <- arab_w1_final %>%
+  full_join(arab_w1_fight_corruption, by = c("country", "year", "ccode", "scale")) 
+
+arab_w1_final <- arab_w1_final %>%
+  full_join(arab_w1_groups_corruption, by = c("country", "year", "ccode", "scale")) 
+
+arab_w1_final <- arab_w1_final %>%
+  full_join(arab_w1_sat_dem, by = c("country", "year", "ccode", "scale")) 
+
+
+arab_w1_final <- select(arab_w1_final, -c(cnt.x, cnt.y, cnt.x.x, cnt.y.y,))
+```
+
+Wave 2
+```{r}
+arab_wave2 <- read_csv("Data bases/Arab Barometer/wave2.csv")
+
+names(arab_wave2)
+table(arab_wave2$country)
+```
+
+Create years
+```{r}
+arab_wave2$year <- 0
+
+arab_wave2$year[arab_wave2$country == "1. Algeria"] <- "2011"
+arab_wave2$year[arab_wave2$country == "5. Egypt"] <- "2011"
+arab_wave2$year[arab_wave2$country == "7. Iraq"] <- "2011"
+arab_wave2$year[arab_wave2$country == "8. Jordan"] <- "2010"
+arab_wave2$year[arab_wave2$country == "10. Lebanon"] <- "2010"
+arab_wave2$year[arab_wave2$country == "15. Palestine"] <- "2010"
+arab_wave2$year[arab_wave2$country == "17. Saudi Arabia"] <- "2011"
+arab_wave2$year[arab_wave2$country == "19. Sudan"] <- "2010"
+arab_wave2$year[arab_wave2$country == "21. Tunisia"] <- "2011"
+arab_wave2$year[arab_wave2$country == "22. Yemen"] <- "2011"
+
+arab_wave2$country[arab_wave2$country == "1. Algeria"] <- "Algeria"
+arab_wave2$country[arab_wave2$country == "5. Egypt"] <- "Egypt"
+arab_wave2$country[arab_wave2$country == "7. Iraq"] <- "Iraq"
+arab_wave2$country[arab_wave2$country == "8. Jordan"] <- "Jordan"
+arab_wave2$country[arab_wave2$country == "10. Lebanon"] <- "Lebanon"
+arab_wave2$country[arab_wave2$country == "15. Palestine"] <- "Palestine"
+arab_wave2$country[arab_wave2$country == "17. Saudi Arabia"] <- "Saudi Arabia"
+arab_wave2$country[arab_wave2$country == "19. Sudan"] <- "Sudan"
+arab_wave2$country[arab_wave2$country == "21. Tunisia"] <- "Tunisia"
+arab_wave2$country[arab_wave2$country == "22. Yemen"] <- "Yemen"
+
+# Add country code
+arab_wave2$ccode <- NA
+arab_wave2$ccode <- countrycode(arab_wave2$country, origin = "country.name",
+                             destination = "cown", warn = TRUE)
+```
+
+
+q513 - Suppose that there was a scale from 1-10 to measure the extent of your satisfaction with the government, in which 1 means that you were absolutely unsatisfied with its performance and 10
+means that you were very satisfied, to what extent are you satisfied with the government’s
+performance? 
+```{r}
+table(arab_wave2$q513)
+
+arab_wave2$sat_dem <- recode(arab_wave2$q513,
+                             "1. absolutely unsatisfied" = 1,
+                             "2" = 1,
+                             "3" = 1,
+                             "4" = 2,
+                             "5" = 2,
+                             "6" = 3,
+                             "7" = 3,
+                             "8" = 4,
+                             "9" = 4,
+                             "10. very satisfied" = 4)
+table(arab_wave2$sat_dem)
+```
+
+Fight corruption
+```{r}
+table(arab_wave2$q211)
+arab_wave2$fight_corruption <- recode(arab_wave2$q211,
+                             "4. not at all" = 1,
+                             "3. to a limited extent" = 2,
+                             "2. to a medium extent" = 3,
+                             "1. to a great extent" = 4)
+
+arab_w2_fight_corruption <- arab_wave2 %>%
+  group_by(country, year, ccode, fight_corruption) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_fight_corr = round(cnt / sum(cnt), 3))
+```
+
+
+Q201
+q2011 The government (the
+cabinet)
+q2012  the judiciary
+```{r}
+arab_wave2$conf_gov <- recode(arab_wave2$q2011,
+                             "4. i absolutely do not trust it" = 1,
+                             "3. i trust it to a limited extent" = 2,
+                             "2. i trust it to a medium extent" = 3,
+                             "1. i trust it to a great extent" = 4)
+
+arab_wave2$conf_just <- recode(arab_wave2$q2011,
+                             "4. i absolutely do not trust it" = 1,
+                             "3. i trust it to a limited extent" = 2,
+                             "2. i trust it to a medium extent" = 3,
+                             "1. i trust it to a great extent" = 4)
+
+arab_w2_conf_gov <- arab_wave2 %>%
+  group_by(country, year, ccode, conf_gov) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_gov = round(cnt / sum(cnt), 3))
+
+arab_w2_conf_just <- arab_wave2 %>%
+  group_by(country, year, ccode, conf_just) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_just = round(cnt / sum(cnt), 3))
+
+arab_w2_sat_dem <- arab_wave2 %>%
+  group_by(country, year, ccode, sat_dem) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_sat_dem = round(cnt / sum(cnt), 3))
+
+arab_w2_conf_gov <- rename(arab_w2_conf_gov, scale = conf_gov)
+arab_w2_conf_just <- rename(arab_w2_conf_just, scale = conf_just)
+arab_w2_fight_corruption <- rename(arab_w2_fight_corruption, scale = fight_corruption)
+arab_w2_sat_dem <- rename(arab_w2_sat_dem, scale = sat_dem)
+
+arab_w2_final <- arab_w2_conf_gov %>%
+  full_join(arab_w2_conf_just, by = c("country", "year", "ccode", "scale"))
+
+arab_w2_final <- arab_w2_final %>%
+  full_join(arab_w2_fight_corruption, by = c("country", "year", "ccode", "scale")) 
+
+arab_w2_final <- arab_w2_final %>%
+  full_join(arab_w2_sat_dem, by = c("country", "year", "ccode", "scale")) 
+
+names(arab_w2_final)
+
+arab_w2_final <- select(arab_w2_final, -c(cnt.x, cnt.y, cnt.x.x, cnt.y.y))
+```
+
+Wave 3
+
+```{r}
+arab_wave3 <- read_csv("Data bases/Arab Barometer/wave3.csv")
+
+head(arab_wave3)
+```
+
+```{r}
+arab_wave3$year <- 0
+
+arab_wave3$year[arab_wave3$country == "Algeria"] <- "2013"
+arab_wave3$year[arab_wave3$country == "Egypt"] <- "2013"
+arab_wave3$year[arab_wave3$country == "Iraq"] <- "2013"
+arab_wave3$year[arab_wave3$country == "Jordan"] <- "2012"
+arab_wave3$year[arab_wave3$country == "Kuwait"] <- "2014"
+arab_wave3$year[arab_wave3$country == "Lebanon"] <- "2013"
+arab_wave3$year[arab_wave3$country == "Libya"] <- "2014"
+arab_wave3$year[arab_wave3$country == "Morocco"] <- "2013"
+arab_wave3$year[arab_wave3$country == "Palestine"] <- "2012"
+arab_wave3$year[arab_wave3$country == "Sudan"] <- "2013"
+arab_wave3$year[arab_wave3$country == "Tunisia"] <- "2013"
+arab_wave3$year[arab_wave3$country == "Yemen"] <- "2013"
+
+# Add country code
+arab_wave3$ccode <- NA
+arab_wave3$ccode <- countrycode(arab_wave3$country, origin = "country.name",
+                             destination = "cown", warn = TRUE)
+```
+
+q201 - I will name a number of institutions, and I would like you to tell me to what extent you trust each of them:
+q2011 - The government
+No judiciary
+```{r}
+table(arab_wave3$q2011)
+
+arab_wave3$conf_gov <- recode(arab_wave3$q2011,
+                             "I absolutely do not trust it" = 1,
+                             "I trust it to a limited extent" = 2,
+                             "I trust it to a medium extent" = 3,
+                             "I trust it to a great extent" = 4)
+
+table(arab_wave3$conf_gov)
+```
+
+
+Fight corruption q211
+```{r}
+table(arab_wave3$q211)
+
+arab_wave3$fight_corruption <- recode(arab_wave3$q211,
+                             "Not at all" = 1,
+                             "To a limited extent" = 2,
+                             "To a medium extent" = 3,
+                             "To a great extent" = 4)
+```
+
+Satisfaction democracy
+```{r}
+table(arab_wave3$q513)
+
+arab_wave3$sat_dem <- recode(arab_wave3$q513,
+                             "Absolutely unsatisfied" = 1,
+                             "2" = 1,
+                             "3" = 1,
+                             "4" = 2,
+                             "5" = 2,
+                             "6" = 3,
+                             "7" = 3,
+                             "8" = 4,
+                             "9" = 4,
+                             "Completely satisfied" = 4)
+table(arab_wave3$sat_dem)
+```
+
+```{r}
+arab_w3_fight_corruption <- arab_wave3 %>%
+  group_by(country, year, ccode, fight_corruption) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_fight_corr = round(cnt / sum(cnt), 3))
+
+arab_w3_conf_gov <- arab_wave3 %>%
+  group_by(country, year, ccode, conf_gov) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_gov = round(cnt / sum(cnt), 3))
+
+arab_w3_sat_dem <- arab_wave3 %>%
+  group_by(country, year, ccode, sat_dem) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_sat_dem = round(cnt / sum(cnt), 3))
+
+arab_w3_fight_corruption <- rename(arab_w3_fight_corruption, scale = fight_corruption)
+arab_w3_conf_gov <- rename(arab_w3_conf_gov, scale = conf_gov)
+arab_w3_sat_dem <- rename(arab_w3_sat_dem, scale = sat_dem)
+
+arab_w3_final <- arab_w3_fight_corruption %>%
+  full_join(arab_w3_conf_gov, by = c("country", "year", "ccode", "scale"))
+
+arab_w3_final <- arab_w3_final %>%
+  full_join(arab_w3_sat_dem, by = c("country", "year", "ccode",  "scale")) 
+
+arab_w3_final <- select(arab_w3_final, -c(cnt.x, cnt.y))
+
+```
+
+Wave 4
+```{r}
+arab_wave4 <- read_csv("Data bases/Arab Barometer/wave4.csv")
+head(arab_wave4)
+
+arab_wave4$year <- 0
+
+arab_wave4$year[arab_wave4$country == "Algeria"] <- "2016"
+arab_wave4$year[arab_wave4$country == "Egypt"] <- "2016"
+arab_wave4$year[arab_wave4$country == "Jordan"] <- "2016"
+arab_wave4$year[arab_wave4$country == "Lebanon"] <- "2016"
+arab_wave4$year[arab_wave4$country == "Morocco"] <- "2016"
+arab_wave4$year[arab_wave4$country == "Palestine"] <- "2016"
+arab_wave4$year[arab_wave4$country == "Tunisia"] <- "2016"
+
+# Add country code
+arab_wave4$ccode <- NA
+arab_wave4$ccode <- countrycode(arab_wave4$country, origin = "country.name",
+                             destination = "cown", warn = TRUE)
+```
+
+Extent corruption - q210
+```{r}
+table(arab_wave4$q210)
+
+arab_wave4$extent_corruption <- recode(arab_wave4$q210,
+                             "Not at all" = 1,
+                             "To a small extent" = 2,
+                             "To a medium extent" = 3,
+                             "To a large extent" = 4)
+```
+
+
+Fight corruption - q211
+```{r}
+table(arab_wave4$q211)
+
+arab_wave4$fight_corruption <- recode(arab_wave4$q211,
+                             "Not at all" = 1,
+                             "To a small extent" = 2,
+                             "To a medium extent" = 3,
+                             "To a large extent" = 4)
+```
+
+Confidence Government - q2011
+Confidence Justice - q2012
+```{r}
+table(arab_wave4$q2011)
+arab_wave4$conf_gov <- recode(arab_wave4$q2011,
+                             "No trust at all" = 1,
+                             "Not very much trust" = 2,
+                             "Quite a lot of trust" = 3,
+                             "A great deal of trust" = 4)
+
+arab_wave4$conf_just <- recode(arab_wave4$q2012,
+                             "No trust at all" = 1,
+                             "Not very much trust" = 2,
+                             "Quite a lot of trust" = 3,
+                             "A great deal of trust" = 4)
+```
+
+Satisfaction democracy
+```{r}
+table(arab_wave4$q513)
+
+arab_wave4$sat_dem <- recode(arab_wave4$q513,
+                             "Completely unsatisfied" = 1,
+                             "2" = 1,
+                             "3" = 1,
+                             "4" = 2,
+                             "5" = 2,
+                             "6" = 3,
+                             "7" = 3,
+                             "8" = 4,
+                             "9" = 4,
+                             "Completely satisfied" = 4)
+```
+
+```{r}
+arab_w4_extent_corruption <- arab_wave4 %>%
+  group_by(country, year, ccode, extent_corruption) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_ext_corr = round(cnt / sum(cnt), 3))
+
+arab_w4_fight_corruption <- arab_wave4 %>%
+  group_by(country, year, ccode, fight_corruption) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_fight_corr = round(cnt / sum(cnt), 3))
+
+arab_w4_conf_gov <- arab_wave4 %>%
+  group_by(country, year, ccode, conf_gov) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_gov = round(cnt / sum(cnt), 3))
+
+arab_w4_conf_just <- arab_wave4 %>%
+  group_by(country, year, ccode, conf_just) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_just = round(cnt / sum(cnt), 3))
+
+arab_w4_sat_dem <- arab_wave4 %>%
+  group_by(country, year, ccode, sat_dem) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_sat_dem = round(cnt / sum(cnt), 3))
+
+arab_w4_extent_corruption <- rename(arab_w4_extent_corruption, scale = extent_corruption)
+arab_w4_fight_corruption <- rename(arab_w4_fight_corruption, scale = fight_corruption)
+arab_w4_conf_gov <- rename(arab_w4_conf_gov, scale = conf_gov)
+arab_w4_conf_just <- rename(arab_w4_conf_just, scale = conf_just)
+arab_w4_sat_dem <- rename(arab_w4_sat_dem, scale = sat_dem)
+
+arab_w4_final <- arab_w4_extent_corruption %>%
+  full_join(arab_w4_fight_corruption, by = c("country", "year", "ccode", "scale"))
+
+arab_w4_final <- arab_w4_final %>%
+  full_join(arab_w4_conf_gov, by = c("country", "year", "ccode", "scale")) 
+
+arab_w4_final <- arab_w4_final %>%
+  full_join(arab_w4_conf_just, by = c("country", "year", "ccode", "scale")) 
+
+arab_w4_final <- arab_w4_final %>%
+  full_join(arab_w4_sat_dem, by = c("country", "year", "ccode", "scale")) 
+
+arab_w4_final <- select(arab_w4_final, -c(cnt.x, cnt.y, cnt.x.x, cnt.y.y))
+```
+
+Wave 5
+
+```{r}
+arab_wave5 <- read_csv("Data bases/Arab Barometer/wave5.csv")
+
+arab_wave5$country <- recode(arab_wave5$country,
+                             "1" = "Algeria",
+                             "5" = "Egypt",
+                             "7" = "Iraq",
+                             "8" = "Jordan",
+                             "9" = "Kuwait",
+                             "10" = "Lebanon",
+                             "11" = "Libya",
+                             "13" = "Morocco",
+                             "15" = "Palestine",
+                             "19" = "Sudan",
+                             "21" = "Tunisia",
+                             "22" = "Yemen")
+
+# Add country code
+arab_wave5$ccode <- NA
+arab_wave5$ccode <- countrycode(arab_wave5$country, origin = "country.name",
+                             destination = "cown", warn = TRUE)
+
+arab_wave5$year <- 0
+
+arab_wave5$year[arab_wave5$country == "Algeria"] <- "2019"
+arab_wave5$year[arab_wave5$country == "Egypt"] <- "2018"
+arab_wave5$year[arab_wave5$country == "Iraq"] <- "2019"
+arab_wave5$year[arab_wave5$country == "Jordan"] <- "2018"
+arab_wave5$year[arab_wave5$country == "Kuwait"] <- "2019"
+arab_wave5$year[arab_wave5$country == "Lebanon"] <- "2018"
+arab_wave5$year[arab_wave5$country == "Libya"] <- "2019"
+arab_wave5$year[arab_wave5$country == "Morocco"] <- "2018"
+arab_wave5$year[arab_wave5$country == "Palestine"] <- "2018"
+arab_wave5$year[arab_wave5$country == "Sudan"] <- "2018"
+arab_wave5$year[arab_wave5$country == "Tunisia"] <- "2018"
+arab_wave5$year[arab_wave5$country == "Yemen"] <- "2018"
+```
+
+Confidence - Q201a. [PROGRAMMER: SEE SPECIFIC ITEMS] I’m going to name a number of institutions.
+For each one, please tell me how much trust you have in them
+Q201A_1 - Government
+Q201A_2 - Courts
+
+```{r}
+table(arab_wave5$Q201A_1)
+table(arab_wave5$Q201A_2)
+# 1 = a great deal of trust
+# 4 = no trust at all
+
+arab_wave5$conf_gov <- recode(arab_wave5$Q201A_1,
+                             "4" = 1,
+                             "3" = 2,
+                             "2" = 3,
+                             "1" = 4)
+
+arab_wave5$conf_just <- recode(arab_wave5$Q201A_2,
+                             "4" = 1,
+                             "3" = 2,
+                             "2" = 3,
+                             "1" = 4)
+
+arab_wave5 <- 
+  arab_wave5 %>% 
+  mutate(conf_gov = replace(conf_gov, conf_gov >= 5, NA),
+         conf_just = replace(conf_just, conf_just >= 5, NA))
+    
+table(arab_wave5$conf_gov)
+table(arab_wave5$conf_just)
+```
+
+
+Extent corruption
+Q210. [PROGRAMMER: IF COUNTRY != 1] To what extent do you think that there is
+corruption within the national state agencies and institutions in your country?
+1. To a large extent
+2. To a medium extent
+3. To a small extent
+4. Not at all 
+
+```{r}
+table(arab_wave5$Q210)
+
+arab_wave5$extent_corruption <- recode(arab_wave5$Q210,
+                             "4 " = 1,
+                             "3" = 2,
+                             "2" = 3,
+                             "1" = 4)
+
+table(arab_wave5$extent_corruption)
+arab_wave5 <- 
+  arab_wave5 %>% 
+  mutate(extent_corruption = replace(extent_corruption, extent_corruption >= 5, NA))
+```
+
+Q211. [PROGRAMMER: IF COUNTRY != 1 & Q210 == 1, 2 OR 3] In your opinion, to what
+extent is the national government working to crackdown on corruption?
+1. To a large extent
+2. To a medium extent
+3. To a small extent
+4. Not at all
+```{r}
+table(arab_wave5$Q211)
+
+arab_wave5$fight_corruption <- recode(arab_wave5$Q211,
+                             "4 " = 1,
+                             "3" = 2,
+                             "2" = 3,
+                             "1" = 4)
+
+table(arab_wave5$fight_corruption)
+
+arab_wave5 <- 
+  arab_wave5 %>% 
+  mutate(fight_corruption = replace(fight_corruption, fight_corruption >= 5, NA))
+```
+
+Q211a. [PROGRAMMER: IF COUNTRY != 1 & Q210 == 1,2 OR 3] How widespread do you
+think corruption is in your local / municipal government. Would you say …? [IF COUNTRY ==
+21 (state government)]
+1. Hardly anyone is involved
+2. Not a lot of officials are corrupt
+3. Most officials are corrupt
+4. Almost everyone is corrupt
+```{r}
+table(arab_wave5$Q211A)
+
+arab_wave5$groups_corruption <- arab_wave5$Q211A
+
+table(arab_wave5$groups_corruption)
+
+arab_wave5 <- 
+  arab_wave5 %>% 
+  mutate(groups_corruption = replace(groups_corruption, groups_corruption >= 5, NA))
+```
+
+Q513. [PROGRAMMER: IF COUNTRY != 1 OR 9] On a scale from 0-10 measuring the
+extent of your satisfaction with the current government’s performance, in which 0 means that you
+are completely dissatisfied with its performance and 10 means you are completely satisfied. To
+what extent are you satisfied with the current government’s performance? 
+```{r}
+table(arab_wave5$Q513)
+
+arab_wave5$sat_dem <- recode(arab_wave5$Q513,
+                             "0" = 1,
+                             "2" = 1,
+                             "3" = 1,
+                             "4" = 2,
+                             "5" = 2,
+                             "6" = 3,
+                             "7" = 3,
+                             "8" = 4,
+                             "9" = 4,
+                             "10" = 4)
+
+table(arab_wave5$sat_dem)
+
+arab_wave5 <- 
+  arab_wave5 %>% 
+  mutate(sat_dem = replace(sat_dem, sat_dem >= 5, NA))
+```
+
+```{r}
+arab_w5_conf_gov <- arab_wave5 %>%
+  group_by(country, year, ccode, conf_gov) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_gov = round(cnt / sum(cnt), 3))
+
+arab_w5_conf_just <- arab_wave5 %>%
+  group_by(country, year, ccode, conf_just) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_just = round(cnt / sum(cnt), 3))
+
+arab_w5_extent_corruption <- arab_wave5 %>%
+  group_by(country, year, ccode, extent_corruption) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_ext_corr = round(cnt / sum(cnt), 3))
+
+arab_w5_fight_corruption <- arab_wave5 %>%
+  group_by(country, year, ccode, fight_corruption) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_fight_corr = round(cnt / sum(cnt), 3))
+
+arab_w5_sat_dem <- arab_wave5 %>%
+  group_by(country, year, ccode, sat_dem) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_sat_dem = round(cnt / sum(cnt), 3))
+
+arab_w5_conf_gov <- rename(arab_w5_conf_gov, scale = conf_gov)
+arab_w5_conf_just <- rename(arab_w5_conf_just, scale = conf_just)
+arab_w5_extent_corruption <- rename(arab_w5_extent_corruption, scale = extent_corruption)
+arab_w5_fight_corruption  <- rename(arab_w5_fight_corruption, scale = fight_corruption)
+arab_w5_sat_dem <- rename(arab_w5_sat_dem, scale = sat_dem)
+
+arab_w5_final <- arab_w5_conf_gov %>%
+  full_join(arab_w5_conf_just, by = c("country", "year", "ccode", "scale")) 
+
+arab_w5_final <- arab_w5_final %>%
+  full_join(arab_w5_extent_corruption, by = c("country", "year", "ccode", "scale")) 
+
+arab_w5_final <- arab_w5_final %>%
+  full_join(arab_w5_fight_corruption, by = c("country", "year", "ccode", "scale"))
+
+arab_w5_final <- arab_w5_final %>%
+  full_join(arab_w5_sat_dem, by = c("country", "year", "ccode", "scale")) 
+
+arab_w5_final <- select(arab_w5_final, -c(cnt.x, cnt.y, cnt.x.x, cnt.y.y))
+```
+
+Wave 6
+
+```{r}
+arab_w6_part1 <- read_csv("Data bases/Arab Barometer/wave6_part1.csv")
+arab_w6_part2 <- read_csv("Data bases/Arab Barometer/wave6_part2.csv")
+arab_w6_part3 <- read_csv("Data bases/Arab Barometer/wave6_part3.csv")
+
+# Select specific columns
+arab_w6_part1 <- select(arab_w6_part1, c(COUNTRY, DATE, Q201A_1, Q201A_2, Q210, Q211, Q204A_3))
+arab_w6_part2 <- select(arab_w6_part2, c(COUNTRY, DATE, Q201A_1, Q201A_2, Q210))
+arab_w6_part3 <- select(arab_w6_part3, c(COUNTRY, DATE, Q201A_1, Q201A_2, Q210, Q211, Q204A_3))
+
+arab_w6_part2$Q211 <- NA
+arab_w6_part2$Q204A_3 <- NA
+
+arab_wave6 <- rbind(arab_w6_part1, arab_w6_part2)
+arab_wave6 <- rbind(arab_wave6, arab_w6_part3)
+names(arab_wave6)
+```
+
+```{r}
+arab_wave6$country <- recode(arab_wave6$COUNTRY,
+                             "1" = "Algeria",
+                             "7" = "Iraq",
+                             "8" = "Jordan",
+                             "10" = "Lebanon",
+                             "11" = "Libya",
+                             "13" = "Morocco",
+                             "21" = "Tunisia")
+
+# Add country code
+arab_wave6$ccode <- NA
+arab_wave6$ccode <- countrycode(arab_wave6$country, origin = "country.name",
+                             destination = "cown", warn = TRUE)
+
+table(arab_wave6$country)
+
+arab_wave6$year <- format(as.Date(arab_wave6$DATE, format="%Y-%m-%d"),"%Y")
+```
+
+Trust in the government - Q201A_1
+Trust in Courts - Q201A_2
+1. A great deal of trust
+2. Quite a lot of trust
+3. Not a lot of trust
+4. No trust at all
+
+```{r}
+table(arab_wave6$Q201A_1)
+table(arab_wave6$Q201A_2)
+# 1 = a great deal of trust
+# 4 = no trust at all
+
+arab_wave6$conf_gov <- recode(arab_wave6$Q201A_1,
+                             "4" = 1,
+                             "3" = 2,
+                             "2" = 3,
+                             "1" = 4)
+
+arab_wave6$conf_just <- recode(arab_wave6$Q201A_2,
+                             "4" = 1,
+                             "3" = 2,
+                             "2" = 3,
+                             "1" = 4)
+
+arab_wave6 <- 
+  arab_wave6 %>% 
+  mutate(conf_gov = replace(conf_gov, conf_gov >= 5, NA),
+         conf_just = replace(conf_just, conf_just >= 5, NA))
+    
+table(arab_wave6$conf_gov)
+table(arab_wave6$conf_just)
+```
+
+Q210 To what extent do you think that there is corruption within the national
+state agencies and institutions in your country?
+1. To a large extent
+2. To a medium extent
+3. To a small extent
+4. Not at all
+```{r}
+table(arab_wave6$Q210)
+
+arab_wave6$extent_corruption <- recode(arab_wave6$Q210,
+                             "4 " = 1,
+                             "3" = 2,
+                             "2" = 3,
+                             "1" = 4)
+
+table(arab_wave6$extent_corruption)
+
+arab_wave6 <- 
+  arab_wave6 %>% 
+  mutate(extent_corruption = replace(extent_corruption, extent_corruption >= 5, NA))
+```
+
+Q211 [PROGRAMMER: IF Q210 == 1, 2 OR 3] In your opinion, to what extent is
+the national government working to crackdown on corruption? [NOTE TO
+INTERVIEWER ON PHONE SURVEYS IN LIBYA: If asked, please tell the
+respondent that the question is asking about the government who controls
+the area where the respondent lives.]
+1. To a large extent
+2. To a medium extent
+3. To a small extent
+4. Not at all 
+```{r}
+table(arab_wave6$Q211)
+
+arab_wave6$fight_corruption <- recode(arab_wave6$Q211,
+                             "4 " = 1,
+                             "3" = 2,
+                             "2" = 3,
+                             "1" = 4)
+
+table(arab_wave6$fight_corruption)
+
+arab_wave6 <- 
+  arab_wave6 %>% 
+  mutate(fight_corruption = replace(fight_corruption, fight_corruption >= 5, NA))
+```
+
+Q204A How satisfied are you with the following?
+1. Completely satisfied
+2. Satisfied
+3. Dissatisfied
+4. Completely dissatisfied
+
+The government’s performance
+overall [
+
+```{r}
+table(arab_wave6$Q204A_3)
+
+arab_wave6$sat_dem <- recode(arab_wave6$Q204A_3,
+                             "4" = 1,
+                             "3" = 2,
+                             "2" = 3,
+                             "1" = 4)
+
+table(arab_wave6$sat_dem)
+
+arab_wave6 <- 
+  arab_wave6 %>% 
+  mutate(sat_dem = replace(sat_dem, sat_dem >= 5, NA))
+```
+
+Join
+```{r}
+arab_w6_conf_gov <- arab_wave6 %>%
+  group_by(country, year, ccode, conf_gov) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_gov = round(cnt / sum(cnt), 3))
+
+arab_w6_conf_just <- arab_wave6 %>%
+  group_by(country, year, ccode, conf_just) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_just = round(cnt / sum(cnt), 3))
+
+arab_w6_extent_corruption <- arab_wave6 %>%
+  group_by(country, year, ccode, extent_corruption) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_ext_corr = round(cnt / sum(cnt), 3))
+
+arab_w6_sat_dem <- arab_wave6 %>%
+  group_by(country, year, ccode, sat_dem) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_sat_dem = round(cnt / sum(cnt), 3))
+
+arab_w6_conf_gov <- rename(arab_w6_conf_gov, scale = conf_gov)
+arab_w6_conf_just <- rename(arab_w6_conf_just, scale = conf_just)
+arab_w6_extent_corruption <- rename(arab_w6_extent_corruption, scale = extent_corruption)
+arab_w6_sat_dem <- rename(arab_w6_sat_dem, scale = sat_dem)
+
+arab_w6_final <- arab_w6_conf_gov %>%
+  full_join(arab_w6_conf_just, by = c("country", "year", "ccode", "scale")) 
+
+arab_w6_final <- arab_w6_final %>%
+  full_join(arab_w6_extent_corruption, by = c("country", "year", "ccode", "scale")) 
+
+arab_w6_final <- arab_w6_final %>%
+  full_join(arab_w6_sat_dem, by = c("country", "year", "ccode", "scale")) 
+
+arab_w6_final <- select(arab_w6_final, -c(cnt.x, cnt.y, cnt.x.x, cnt.y.y))
+```
+
+Join all Arabbarometer
+```{r}
+arab_final <- arab_w1_final %>%
+  full_join(arab_w2_final)
+
+arab_final <- arab_final %>%
+  full_join(arab_w3_final)
+
+arab_final <- arab_final %>%
+  full_join(arab_w4_final)
+
+arab_final <- arab_final %>%
+  full_join(arab_w5_final)
+
+arab_final <- arab_final %>%
+  full_join(arab_w6_final)
+
+table(arab_final$country)
+```
+
+
+# Africanbarometer
+
+Wave 1
+Codebook: https://www.afrobarometer.org/wp-content/uploads/2022/02/merged_r1_codebook2.pdf
+```{r}
+merged_r1_data <- read_sav("Data bases/Africanbarometer/merged_r1_data.sav")
+names(merged_r1_data)
+```
+
+```{r}
+table(merged_r1_data$country)
+```
+
+```{r}
+merged_r1_data$country <- as.numeric(merged_r1_data$country)
+merged_r1_data <- merged_r1_data %>%
+  mutate(country = recode(country,
+                          "1" = "Botswana",
+                          "2" = "Ghana",
+                          "3" = "Lesotho",
+                          "4" = "Malawi",
+                          "5" = "Mali",
+                          "6" = "Namibia",
+                          "7" = "Nigeria",
+                          "8" = "South Africa",
+                          "9" = "Tanzania",
+                          "10" = "Uganda",
+                          "11" = "Zambia",
+                          "12" = "Zimbabwe"))
+table(merged_r1_data$country)
+
+# Create country code
+merged_r1_data$ccode <- NA
+merged_r1_data$ccode <- countrycode(merged_r1_data$country, origin = "country.name",
+                             destination = "cown", warn = TRUE)
+```
+
+```{r}
+merged_r1_data$year <- 0
+
+merged_r1_data$year[merged_r1_data$country == "Botswana"] <- "1999"
+merged_r1_data$year[merged_r1_data$country == "Ghana"] <- "1999"
+merged_r1_data$year[merged_r1_data$country == "Lesotho"] <- "2000"
+merged_r1_data$year[merged_r1_data$country == "Malawi"] <- "1999"
+merged_r1_data$year[merged_r1_data$country == "Mali"] <- "2001"
+merged_r1_data$year[merged_r1_data$country == "Namibia"] <- "1999"
+merged_r1_data$year[merged_r1_data$country == "Nigeria"] <- "1999"
+merged_r1_data$year[merged_r1_data$country == "South Africa"] <- "2000"
+merged_r1_data$year[merged_r1_data$country == "Tanzania"] <- "2001"
+merged_r1_data$year[merged_r1_data$country ==  "Uganda"] <- "2000"
+merged_r1_data$year[merged_r1_data$country ==  "Zambia"] <- "1999"
+merged_r1_data$year[merged_r1_data$country ==  "Zimbabwe"] <- "1999"
+```
+
+Variable name: trspre
+Variable label: Trust the president
+Values: 1-4, 9, 98, 99
+Value Labels: 1=I do not trust them at all/Never, 2=I distrust them somewhat/Sometimes, 3=I trust them
+somewhat/Most times, 4=I trust them a lot/Always, 9=Don’t Know, 98=Refused to Answer, 99=Missing
+Data
+```{r}
+table(merged_r1_data$trspre)
+
+merged_r1_data <- 
+  merged_r1_data %>% 
+  mutate(conf_gov = replace(trspre, trspre >= 5, NA))
+```
+
+
+Variable name: trscts
+Variable label: Trust courts of law
+Values: 1-4, 9, 98, 99
+Value Labels: 1=I do not trust them at all/Never, 2=I distrust them somewhat/Sometimes, 3=I trust them
+somewhat/Most times, 4=I trust them a lot/Always, 9=Don’t Know, 98=Refused to Answer, 99=Missing
+Data 
+```{r}
+table(merged_r1_data$trscts)
+
+merged_r1_data <- 
+  merged_r1_data %>% 
+  mutate(conf_just = replace(trscts, trscts >= 5, NA))
+```
+
+
+Variable name: pfpcr2
+Variable label: Extent of corruption/bribery
+Corruption is a fact of life 
+Values: 1-5, 9, 98, 99
+Value Labels: 1=Strongly disagree/Almost all, 2=Disagree/Most, 3=Agree/A few/Some, 4=Strongly
+agree/Almost none, 9=Don’t Know, 98=Refused to Answer, 99=Missing Data 
+```{r}
+table(merged_r1_data$pfpcr2)
+
+merged_r1_data$pfpcr2 <- as.numeric(merged_r1_data$pfpcr2)
+merged_r1_data$extent_corruption <- recode(merged_r1_data$pfpcr2,
+                             "4" = 1,
+                             "3" = 2,
+                             "2" = 3,
+                             "1" = 4)
+
+merged_r1_data <- 
+  merged_r1_data %>% 
+  mutate(extent_corruption = replace(pfpcr2, pfpcr2 >= 5, NA))
+
+table(merged_r1_data$extent_corruption)
+```
+
+
+Variable name: pfpcr1
+Variable label: Handling corruption
+Values: 1-4, 9, 98, 99
+Value Labels: 1=Very badly/Not al all well, 2=Quite badly/Not very well, 3=Fairly well, 4=Very well,
+9=Don’t Know, 98=Refused to Answer, 99=Missing Data
+Notes: Not asked in Namibia and Zimbabwe
+```{r}
+table(merged_r1_data$pfpcr1)
+
+merged_r1_data <- 
+  merged_r1_data %>% 
+  mutate(fight_corruption = replace(pfpcr1, pfpcr1 >= 5, NA))
+table(merged_r1_data$fight_corruption)
+```
+
+
+Groups corruption:
+Variable name: pfpcr3
+Variable label: Corruption among elected leaders
+Values: 1-4, 9, 98, 99
+Value Labels: 1=Very common/Almost all, 2=Fairly common/Most, 3=Fairly rare/A few/Some, 4=Very
+rare/Almost none, 9=Don’t Know, 98=Refused to Answer, 99=Missing Data
+Notes: Not asked in Ghana and Nigeria
+```{r}
+table(merged_r1_data$pfpcr3)
+
+merged_r1_data$pfpcr3 <- as.numeric(merged_r1_data$pfpcr3)
+merged_r1_data$groups_corruption <- recode(merged_r1_data$pfpcr3,
+                             "4" = 1,
+                             "3" = 2,
+                             "2" = 3,
+                             "1" = 4)
+
+merged_r1_data <- 
+  merged_r1_data %>% 
+  mutate(groups_corruption = replace(pfpcr3, pfpcr3 >= 5, NA))
+table(merged_r1_data$groups_corruption)
+```
+
+
+Variable name: dmpsat
+Variable label: Satisfaction with democracy
+Values: 0-5, 9, 97, 98, 99
+Value Labels: 0=This country is not a democracy, 1=Very dissatisfied, 2=Somewhat dissatisfied,
+3=Neutral, 4=Somewhat satisfied, 5=Very satisfied, 9=Don’t Know, 97=Not Applicable, 98=Refused to
+Answer, 99=Missing Data 
+```{r}
+table(merged_r1_data$dmpsat)
+
+merged_r1_data$dmpsat <- as.numeric(merged_r1_data$dmpsat)
+merged_r1_data$sat_dem <- recode(merged_r1_data$dmpsat,
+                             "1" = 1,
+                             "2" = 2,
+                             "3" = 3,
+                             "4" = 3,
+                             "5" = 4)
+
+merged_r1_data <- 
+  merged_r1_data %>% 
+  mutate(sat_dem = replace(sat_dem, sat_dem >= 5, NA),
+         sat_dem = replace(sat_dem, sat_dem == 0, NA))
+
+table(merged_r1_data$sat_dem)
+```
+
+Join
+```{r}
+afr_w1_conf_gov <- merged_r1_data %>%
+  group_by(country, year, ccode, conf_gov) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_gov = round(cnt / sum(cnt), 3))
+
+afr_w1_conf_just <- merged_r1_data %>%
+  group_by(country, year, ccode, conf_just) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_just = round(cnt / sum(cnt), 3))
+
+afr_w1_extent_corruption <- merged_r1_data %>%
+  group_by(country, year, ccode, extent_corruption) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_ext_corr = round(cnt / sum(cnt), 3))
+
+afr_w1_fight_corruption <- merged_r1_data %>%
+  group_by(country, year, ccode, fight_corruption) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_fight_corr = round(cnt / sum(cnt), 3))
+
+afr_w1_groups_corruption <- merged_r1_data %>%
+  group_by(country, year, ccode, groups_corruption) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_groups_corr = round(cnt / sum(cnt), 3))
+
+afr_w1_sat_dem <- merged_r1_data %>%
+  group_by(country, year, ccode, sat_dem) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_sat_dem = round(cnt / sum(cnt), 3))
+
+afr_w1_conf_gov <- rename(afr_w1_conf_gov, scale = conf_gov)
+afr_w1_conf_just <- rename(afr_w1_conf_just, scale = conf_just)
+afr_w1_extent_corruption <- rename(afr_w1_extent_corruption, scale = extent_corruption)
+afr_w1_fight_corruption <- rename(afr_w1_fight_corruption, scale = fight_corruption)
+afr_w1_groups_corruption <- rename(afr_w1_groups_corruption, scale = groups_corruption)
+afr_w1_sat_dem <- rename(afr_w1_sat_dem, scale = sat_dem)
+
+africa_w1_final <- afr_w1_conf_gov %>%
+  full_join(afr_w1_conf_just, by = c("country", "year", "ccode", "scale")) 
+
+africa_w1_final <- africa_w1_final %>%
+  full_join(afr_w1_extent_corruption, by = c("country", "year", "ccode", "scale")) 
+
+africa_w1_final <- africa_w1_final %>%
+  full_join(afr_w1_fight_corruption, by = c("country", "year", "ccode", "scale")) 
+
+africa_w1_final <- africa_w1_final %>%
+  full_join(afr_w1_groups_corruption, by = c("country", "year", "ccode", "scale")) 
+
+africa_w1_final <- africa_w1_final %>%
+  full_join(afr_w1_sat_dem, by = c("country", "year", "ccode", "scale")) 
+
+names(africa_w1_final)
+africa_w1_final <- select(africa_w1_final, -c(cnt.x, cnt.y, cnt.x.x, cnt.y.y, cnt.x.x.x, cnt.y.y.y))
+```
+
+Wave 2
+```{r}
+merged_r2_data <- read_sav("Data bases/Africanbarometer/merged_r2_data.sav")
+names(merged_r2_data)
+```
+
+
+```{r}
+table(merged_r2_data$country)
+```
+
+```{r}
+merged_r2_data$country <- as.numeric(merged_r2_data$country)
+merged_r2_data <- merged_r2_data %>%
+  mutate(country = recode(country,
+                          "1" = "Botswana",
+                          "2" = "Ghana",
+                          "3" = "Lesotho",
+                          "4" = "Malawi",
+                          "5" = "Mali",
+                          "6" = "Namibia",
+                          "7" = "Nigeria",
+                          "8" = "South Africa",
+                          "9" = "Tanzania",
+                          "10" = "Uganda",
+                          "11" = "Zambia",
+                          "12" = "Zimbabwe",
+                          "13" = "Cape Verde",
+                          "14" = "Kenya",
+                          "15" = "Mozambique",
+                          "16" = "Senegal"))
+table(merged_r2_data$country)
+
+# Create country code
+merged_r2_data$ccode <- NA
+merged_r2_data$ccode <- countrycode(merged_r2_data$country, origin = "country.name",
+                                    destination = "cown", warn = TRUE)
+```
+
+```{r}
+table(merged_r2_data$dateintr)
+
+merged_r2_data$year <- format(as.Date(merged_r2_data$dateintr, format="%Y-%m-%d"),"%Y")
+
+table(merged_r2_data$year)
+table(merged_r2_data$year, merged_r2_data$country)
+
+merged_r2_data$year[merged_r2_data$country ==  "Senegal"] <- "2002"
+```
+
+Question Number: Q43A
+Question: How much do you trust each of the following, or haven’t you heard enough about them to say: The
+President?
+Variable label: Trust the President
+Values: 0-3, 9, 98, -1
+Value Labels: 0=Not at all, 1=A little bit, 2=A lot, 3=A very great deal, 9=Don’t Know/Haven’t Heard Enough,
+98=Refused to Answer, -1=Missing Data
+```{r}
+table(merged_r2_data$q43a)
+merged_r2_data$q43a <- as.numeric(merged_r2_data$q43a)
+
+merged_r2_data$q43a <- recode(merged_r2_data$q43a,
+                             "0" = 1,
+                             "1" = 2,
+                             "2" = 3,
+                             "3" = 4,
+                             "-1" = 99)
+
+merged_r2_data <- 
+  merged_r2_data %>% 
+  mutate(conf_gov = replace(q43a, q43a >= 5, NA))
+
+table(merged_r2_data$conf_gov)
+```
+
+
+Question Number: Q43J
+Question: How much do you trust each of the following, or haven’t you heard enough about them to say: Courts of
+Law?
+Variable label: Trust courts of law
+Values: 0-3, 9, 98, -1
+Value Labels: 0=Not at all, 1=A little bit, 2=A lot, 3=A very great deal, 9=Don’t Know/Haven’t Heard Enough,
+98=Refused to Answer, -1=Missing Data
+```{r}
+table(merged_r2_data$q43j)
+merged_r2_data$q43j <- as.numeric(merged_r2_data$q43j)
+
+merged_r2_data$q43j <- recode(merged_r2_data$q43j,
+                             "0" = 1,
+                             "1" = 2,
+                             "2" = 3,
+                             "3" = 4,
+                             "-1" = 99)
+
+merged_r2_data <- 
+  merged_r2_data %>% 
+  mutate(conf_just = replace(q43j, q43j >= 5, NA))
+table(merged_r2_data$conf_just)
+```
+
+Question Number: Q45J
+Question: How well or badly would you say the current government is handling the following matters, or haven’t
+you heard enough about them to say: Fighting corruption in government?
+Variable label: Handling fighting corruption in government
+Values: 1-4, 9, 98, -1
+Value Labels: 1=Very Badly, 2=Fairly Badly, 3=Fairly Well, 4=Very Well, 9=Don’t Know/Haven’t heard enough,
+98=Refused to Answer, -1=Missing Data
+```{r}
+table(merged_r2_data$q45j)
+merged_r2_data$q45j <- as.numeric(merged_r2_data$q45j)
+
+merged_r2_data <- 
+  merged_r2_data %>% 
+  mutate(fight_corruption = replace(q45j, q45j > 5 | q45j <=-1, NA))
+
+table(merged_r2_data$fight_corruption)
+```
+
+
+Question Number: Q51C
+Question: How many of the following people do you think are involved in corruption, or haven’t you heard enough
+about them to say: Government officials?
+Variable label: Corruption: Government officials
+Values: 0-3, 9, 98, -1
+Value Labels: 0=None, 1=Some of them, 2=Most of them, 3=All of them, 9=Don’t Know, 98=Refused to Answer,
+-1=Missing Data
+```{r}
+table(merged_r2_data$q51c)
+
+merged_r2_data$q51c <- as.numeric(merged_r2_data$q51c)
+merged_r2_data$groups_corruption <- recode(merged_r2_data$q51c,
+                             "0" = 1,
+                             "1" = 2,
+                             "2" = 3,
+                             "3" = 4,
+                             "-1" = 99)
+
+merged_r2_data <- 
+  merged_r2_data %>% 
+  mutate(groups_corruption = replace(groups_corruption, groups_corruption >= 5, NA))
+
+table(merged_r2_data$groups_corruption)
+```
+
+
+Question Number: Q40
+Question: Overall, how satisfied are you with the way democracy works in [country name]? Are you:
+Variable label: Satisfaction with democracy
+Values: 0-4, 9, 98, -1
+Value Labels: 0=[Country] is not a democracy, 1=Not at All Satisfied, 2=Not Very Satisfied, 3=Fairly Satisfied,
+4=Very Satisfied, 9=Don’t Know, 98=Refused to Answer, -1=Missing Data
+```{r}
+table(merged_r2_data$q40)
+merged_r2_data$q40 <- as.numeric(merged_r2_data$q40)
+
+merged_r2_data$sat_dem <- recode(merged_r2_data$q40,
+                             "-1" = 99,
+                             "0" = 99)
+
+merged_r2_data <- 
+  merged_r2_data %>% 
+  mutate(sat_dem = replace(sat_dem, sat_dem >= 5, NA))
+
+table(merged_r2_data$sat_dem)
+```
+
+Join
+```{r}
+conf_gov_afr_w2 <- merged_r2_data %>%
+  group_by(country, year, ccode, conf_gov) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_gov = round(cnt / sum(cnt), 3))
+
+conf_just_afr_w2 <- merged_r2_data %>%
+  group_by(country, year, ccode, conf_just) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_just = round(cnt / sum(cnt), 3))
+
+fight_corruption_afr_w2 <- merged_r2_data %>%
+  group_by(country, year, ccode, fight_corruption) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_fight_corr = round(cnt / sum(cnt), 3))
+
+groups_corruption_afr_w2 <- merged_r2_data %>%
+  group_by(country, year, ccode, groups_corruption) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_groups_corr = round(cnt / sum(cnt), 3))
+
+sat_dem_afr_w2 <- merged_r2_data %>%
+  group_by(country, year, ccode, sat_dem) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_sat_dem = round(cnt / sum(cnt), 3))
+
+conf_gov_afr_w2 <- rename(conf_gov_afr_w2, scale = conf_gov)
+conf_just_afr_w2 <- rename(conf_just_afr_w2, scale = conf_just)
+fight_corruption_afr_w2 <- rename(fight_corruption_afr_w2, scale = fight_corruption)
+groups_corruption_afr_w2 <- rename(groups_corruption_afr_w2, scale = groups_corruption)
+sat_dem_afr_w2 <- rename(sat_dem_afr_w2, scale = sat_dem)
+
+africa_w2_final <- conf_gov_afr_w2 %>%
+  full_join(conf_just_afr_w2, by = c("country", "year", "ccode", "scale")) 
+
+africa_w2_final <- africa_w2_final %>%
+  full_join(fight_corruption_afr_w2, by = c("country", "year", "ccode", "scale")) 
+
+africa_w2_final <- africa_w2_final %>%
+  full_join(groups_corruption_afr_w2, by = c("country", "year", "ccode", "scale")) 
+
+africa_w2_final <- africa_w2_final %>%
+  full_join(sat_dem_afr_w2, by = c("country", "year", "ccode", "scale")) 
+
+names(africa_w2_final)
+africa_w2_final <- select(africa_w2_final, -c(cnt.x, cnt.y, cnt.x.x, cnt.y.y))
+
+```
+
+Wave 3
+```{r}
+merged_r3_data <- read_sav("Data bases/Africanbarometer/merged_r3_data.sav")
+names(merged_r3_data)
+```
+
+```{r}
+table(merged_r3_data$country)
+```
+
+```{r}
+merged_r3_data$country <- as.numeric(merged_r3_data$country)
+
+merged_r3_data <- merged_r3_data %>%
+  mutate(country = recode(country,
+                          "1" = "Benin",
+                          "2" = "Botswana",
+                          "3" = "Cape Verde",
+                          "4" = "Ghana",
+                          "5" = "Kenya",
+                          "6" = "Lesotho",
+                          "7" = "Madagascar",
+                          "8" = "Malawi",
+                          "9" = "Mali",
+                          "10" = "Mozambique",
+                          "11" = "Namibia",
+                          "12" = "Nigeria",
+                          "13" = "Senegal",
+                          "14" = "South Africa",
+                          "15" = "Tanzania",
+                          "16" = "Uganda",
+                          "17" = "Zambia",
+                          "18" = "Zimbabwe"))
+
+table(merged_r3_data$country)
+
+# Create country code
+merged_r3_data$ccode <- NA
+merged_r3_data$ccode <- countrycode(merged_r3_data$country, origin = "country.name",
+                                    destination = "cown", warn = TRUE)
+```
+
+```{r}
+table(merged_r3_data$dateintr)
+
+merged_r3_data$year <- format(as.Date(merged_r3_data$dateintr, format="%Y-%m-%d"),"%Y")
+
+table(merged_r3_data$year)
+table(merged_r3_data$year, merged_r3_data$country)
+```
+Question Number: Q55A
+Question: How much do you trust each of the following, or haven’t you heard enough about them to say: The
+President/Prime Minister?
+Variable Label: Trust the President
+Values: 0-3, 9, 98, -1
+Value Labels: 0=Not at all, 1=Just a little, 2=Somewhat, 3=A lot, 9=Don’t Know/Haven’t Heard Enough,
+98=Refused to Answer, -1=Missing Data 
+```{r}
+table(merged_r3_data$q55a)
+merged_r3_data$q55a <- as.numeric(merged_r3_data$q55a)
+
+merged_r3_data$q55a <- recode(merged_r3_data$q55a,
+                             "0" = 1,
+                             "1" = 2,
+                             "2" = 3,
+                             "3" = 4,
+                             "-1" = 99)
+
+merged_r3_data <- 
+  merged_r3_data %>% 
+  mutate(conf_gov = replace(q55a, q55a >= 5, NA))
+
+table(merged_r3_data$conf_gov)
+```
+
+
+Question Number: Q55I
+Question: How much do you trust each of the following, or haven’t you heard enough about them to say: Courts of
+Law?
+Variable Label: Trust courts of law
+Values: 0-3, 9, 98, -1
+Value Labels: 0=Not at all, 1=Just a little, 2=Somewhat, 3=A lot, 9=Don’t Know/Haven’t Heard Enough,
+98=Refused to Answer, -1=Missing Data 
+```{r}
+table(merged_r3_data$q55i)
+merged_r3_data$q55i <- as.numeric(merged_r3_data$q55i)
+
+merged_r3_data$q55i <- recode(merged_r3_data$q55i,
+                             "0" = 1,
+                             "1" = 2,
+                             "2" = 3,
+                             "3" = 4,
+                             "-1" = 99)
+
+merged_r3_data <- 
+  merged_r3_data %>% 
+  mutate(conf_just = replace(q55i, q55i >= 5, NA))
+
+table(merged_r3_data$conf_just)
+```
+
+Question Number: Q65J
+Question: How well or badly would you say the current government is handling the following matters, or haven’t
+you heard enough about them to say: Fighting corruption in government?
+Variable Label: Handling fighting corruption
+Value Labels: 1=Very Badly, 2=Fairly Badly, 3=Fairly Well, 4=Very Well, 9=Don’t Know/Haven’t heard enough,
+98=Refused to Answer, -1=Missing Data 
+```{r}
+table(merged_r3_data$q65j)
+merged_r3_data$q65j <- as.numeric(merged_r3_data$q65j)
+
+merged_r3_data <- 
+  merged_r3_data %>% 
+  mutate(fight_corruption = replace(q65j, q65j > 5 | q65j <=-1, NA))
+
+table(merged_r3_data$fight_corruption)
+```
+
+
+Question Number: Q56D
+Question: How many of the following people do you think are involved in corruption, or haven’t you heard enough
+about them to say: National government officials?
+Variable Label: Corruption: National government officials
+Values: 0-3, 9, 98, -1
+Value Labels: 0=None, 1=Some of them, 2=Most of them, 3=All of them, 9=Don’t Know, 98=Refused to Answer,
+-1=Missing Data 
+```{r}
+table(merged_r3_data$q56d)
+
+merged_r3_data$q56d <- as.numeric(merged_r3_data$q56d)
+
+merged_r3_data$groups_corruption <- recode(merged_r3_data$q56d,
+                             "0" = 1,
+                             "1" = 2,
+                             "2" = 3,
+                             "3" = 4,
+                             "-1" = 99)
+
+merged_r3_data <- 
+  merged_r3_data %>% 
+  mutate(groups_corruption = replace(groups_corruption, groups_corruption >= 5, NA))
+
+table(merged_r3_data$groups_corruption)
+```
+
+
+Question Number: Q47
+Question: Overall, how satisfied are you with the way democracy works in [Ghana/Kenya/etc.]? Are you:
+Variable Label: Satisfaction with democracy
+Values: 0-4, 9, 98, -1
+Value Labels: 0=My country is not a democracy, 1=Not at All Satisfied, 2=Not Very Satisfied, 3=Fairly Satisfied,
+4=Very Satisfied, 9=Don’t Know, 98=Refused to Answer, -1=Missing Data 
+```{r}
+table(merged_r3_data$q47)
+merged_r3_data$q47 <- as.numeric(merged_r3_data$q47)
+
+merged_r3_data$sat_dem <- recode(merged_r3_data$q47,
+                             "-1" = 99,
+                             "0" = 99)
+
+merged_r3_data <- 
+  merged_r3_data %>% 
+  mutate(sat_dem = replace(sat_dem, sat_dem >= 5, NA))
+
+table(merged_r3_data$sat_dem)
+```
+
+Join
+```{r}
+conf_gov_afr_w3 <- merged_r3_data %>%
+  group_by(country, year, ccode, conf_gov) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_gov = round(cnt / sum(cnt), 3))
+
+conf_just_afr_w3 <- merged_r3_data %>%
+  group_by(country, year, ccode, conf_just) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_just = round(cnt / sum(cnt), 3))
+
+fight_corruption_afr_w3 <- merged_r3_data %>%
+  group_by(country, year, ccode, fight_corruption) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_fight_corr = round(cnt / sum(cnt), 3))
+
+groups_corruption_afr_w3 <- merged_r3_data %>%
+  group_by(country, year, ccode, groups_corruption) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_groups_corr = round(cnt / sum(cnt), 3))
+
+sat_dem_afr_w3 <- merged_r3_data %>%
+  group_by(country, year, ccode, sat_dem) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_sat_dem = round(cnt / sum(cnt), 3))
+
+conf_gov_afr_w3 <- rename(conf_gov_afr_w3, scale = conf_gov)
+conf_just_afr_w3 <- rename(conf_just_afr_w3, scale = conf_just)
+fight_corruption_afr_w3 <- rename(fight_corruption_afr_w3, scale = fight_corruption)
+groups_corruption_afr_w3 <- rename(groups_corruption_afr_w3, scale = groups_corruption)
+sat_dem_afr_w3 <- rename(sat_dem_afr_w3, scale = sat_dem)
+
+africa_w3_final <- conf_gov_afr_w3 %>%
+  full_join(conf_just_afr_w3, by = c("country", "year", "ccode", "scale")) 
+
+africa_w3_final <- africa_w3_final %>%
+  full_join(fight_corruption_afr_w3, by = c("country", "year", "ccode", "scale")) 
+
+africa_w3_final <- africa_w3_final %>%
+  full_join(groups_corruption_afr_w3, by = c("country", "year", "ccode", "scale")) 
+
+africa_w3_final <- africa_w3_final %>%
+  full_join(sat_dem_afr_w3, by = c("country", "year", "ccode", "scale")) 
+
+names(africa_w3_final)
+africa_w3_final <- select(africa_w3_final, -c(cnt.x, cnt.y, cnt.x.x, cnt.y.y))
+```
+
+Wave 4
+
+```{r}
+merged_r4_data <- read_sav("Data bases/Africanbarometer/merged_r4_data.sav")
+names(merged_r4_data)
+```
+```{r}
+merged_r4_data$country <- as.numeric(merged_r4_data$COUNTRY)
+table(merged_r4_data$country)
+
+merged_r4_data <- merged_r4_data %>%
+  mutate(country = recode(country,
+                          "1" = "Benin",
+                          "2" = "Botswana",
+                          "3" = "Burkina Faso",
+                          "4" = "Cape Verde",
+                          "5" = "Ghana",
+                          "6" = "Kenya",
+                          "7" = "Lesotho",
+                          "8" = "Liberia",
+                          "9" = "Madagascar",
+                          "10" = "Malawi",
+                          "11" = "Mali",
+                          "12" = "Mozambique",
+                          "13" = "Namibia",
+                          "14" = "Nigeria",
+                          "15" = "Senegal",
+                          "16" = "South Africa",
+                          "17" = "Tanzania",
+                          "18" = "Uganda",
+                          "19" = "Zambia",
+                          "20" = "Zimbabwe"))
+
+table(merged_r4_data$country)
+
+# Create country code
+merged_r4_data$ccode <- NA
+merged_r4_data$ccode <- countrycode(merged_r4_data$country, origin = "country.name",
+                                    destination = "cown", warn = TRUE)
+```
+
+
+```{r}
+table(merged_r4_data$DATEINTR)
+
+merged_r4_data$year <- format(as.Date(merged_r4_data$DATEINTR, format="%Y-%m-%d"),"%Y")
+
+table(merged_r4_data$year)
+table(merged_r4_data$year, merged_r4_data$country)
+```
+
+Question Number: Q49A
+Question: How much do you trust each of the following, or haven’t you heard enough about them to say: The
+President?
+Variable Label: Trust president
+Values: 0-3, 9, 998, -1
+Value Labels: 0=Not at all, 1=Just a little, 2=Somewhat, 3=A lot, 9=Don’t know/Haven’t heard enough,
+998=Refused to answer, -1=Missing data
+```{r}
+table(merged_r4_data$Q49A)
+merged_r4_data$Q49A <- as.numeric(merged_r4_data$Q49A)
+
+merged_r4_data$Q49A <- recode(merged_r4_data$Q49A,
+                             "0" = 1,
+                             "1" = 2,
+                             "2" = 3,
+                             "3" = 4,
+                             "-1" = 99)
+
+merged_r4_data <- 
+  merged_r4_data %>% 
+  mutate(conf_gov = replace(Q49A, Q49A >= 5, NA))
+
+table(merged_r4_data$conf_gov)
+```
+
+
+Question Number: Q49H
+Question: How much do you trust each of the following, or haven’t you heard enough about them to say: Courts of
+law?
+Variable Label: Trust courts of law
+Values: 0-3, 9, 998, -1
+Value Labels: 0=Not at all, 1=Just a little, 2=Somewhat, 3=A lot, 9=Don’t know/Haven’t heard enough,
+998=Refused to answer, -1=Missing data
+```{r}
+table(merged_r4_data$Q49H)
+merged_r4_data$Q49H <- as.numeric(merged_r4_data$Q49H)
+
+merged_r4_data$Q49H <- recode(merged_r4_data$Q49H,
+                             "0" = 1,
+                             "1" = 2,
+                             "2" = 3,
+                             "3" = 4,
+                             "-1" = 99)
+
+merged_r4_data <- 
+  merged_r4_data %>% 
+  mutate(conf_just = replace(Q49H, Q49H >= 5, NA))
+
+table(merged_r4_data$conf_just)
+```
+
+Question Number: Q57K
+Question: How well or badly would you say the current government is handling the following matters, or haven’t
+you heard enough to say: Fighting corruption in government?
+Variable Label: Handling fighting corruption
+Values: 1-4, 9, 998, -1
+Value Labels: 1=Very badly, 2=Fairly badly
+```{r}
+table(merged_r4_data$Q57K)
+merged_r4_data$Q57K <- as.numeric(merged_r4_data$Q57K)
+
+merged_r4_data <- 
+  merged_r4_data %>% 
+  mutate(fight_corruption = replace(Q57K, Q57K > 5 | Q57K <=-1, NA))
+
+table(merged_r4_data$fight_corruption)
+```
+
+
+Question Number: Q50D
+Question: How many of the following people do you think are involved in corruption, or haven’t you heard enough
+about them to say: Government Officials?
+Variable Label: Corruption: government officials
+Values: 0-3, 9, 998, -1
+Value Labels: 0=None, 1=Some of them, 2=Most of them, 3=All of them, 9=Don’t know, 998=Refused to answer,
+-1=Missing data
+```{r}
+table(merged_r4_data$Q50D)
+
+merged_r4_data$Q50D <- as.numeric(merged_r4_data$Q50D)
+
+merged_r4_data$groups_corruption <- recode(merged_r4_data$Q50D,
+                             "0" = 1,
+                             "1" = 2,
+                             "2" = 3,
+                             "3" = 4,
+                             "-1" = 99)
+
+merged_r4_data <- 
+  merged_r4_data %>% 
+  mutate(groups_corruption = replace(groups_corruption, groups_corruption >= 5, NA))
+
+table(merged_r4_data$groups_corruption)
+```
+
+
+Question Number: Q43
+Question: Overall, how satisfied are you with the way democracy works in [Ghana/Kenya/etc.]? Are you:
+Variable Label: Satisfaction with democracy
+Values: 0-4, 9, 998, -1
+Value Labels: 0=My country is not a democracy, 1=Not at all satisfied, 2=Not very satisfied, 3=Fairly satisfied,
+4=Very satisfied, 9=Don’t know, 998=Refused to answer, -1=Missing data
+```{r}
+table(merged_r4_data$Q43)
+
+merged_r4_data$Q43 <- as.numeric(merged_r4_data$Q43)
+
+merged_r4_data$sat_dem <- recode(merged_r4_data$Q43,
+                             "-1" = 99,
+                             "0" = 99)
+
+merged_r4_data <- 
+  merged_r4_data %>% 
+  mutate(sat_dem = replace(sat_dem, sat_dem >= 5, NA))
+
+table(merged_r4_data$sat_dem)
+```
+
+Join
+```{r}
+conf_gov_afr_w4 <- merged_r4_data %>%
+  group_by(country, year, ccode, conf_gov) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_gov = round(cnt / sum(cnt), 3))
+
+conf_just_afr_w4 <- merged_r4_data %>%
+  group_by(country, year, ccode, conf_just) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_just = round(cnt / sum(cnt), 3))
+
+fight_corruption_afr_w4 <- merged_r4_data %>%
+  group_by(country, year, ccode, fight_corruption) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_fight_corr = round(cnt / sum(cnt), 3))
+
+groups_corruption_afr_w4 <- merged_r4_data %>%
+  group_by(country, year, ccode, groups_corruption) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_groups_corr = round(cnt / sum(cnt), 3))
+
+sat_dem_afr_w4 <- merged_r4_data %>%
+  group_by(country, year, ccode, sat_dem) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_sat_dem = round(cnt / sum(cnt), 3))
+
+conf_gov_afr_w4 <- rename(conf_gov_afr_w4, scale = conf_gov)
+conf_just_afr_w4 <- rename(conf_just_afr_w4, scale = conf_just)
+fight_corruption_afr_w4 <- rename(fight_corruption_afr_w4, scale = fight_corruption)
+groups_corruption_afr_w4 <- rename(groups_corruption_afr_w4, scale = groups_corruption)
+sat_dem_afr_w4 <- rename(sat_dem_afr_w4, scale = sat_dem)
+
+africa_w4_final <- conf_gov_afr_w4 %>%
+  full_join(conf_just_afr_w4, by = c("country", "year", "ccode", "scale")) 
+
+africa_w4_final <- africa_w4_final %>%
+  full_join(fight_corruption_afr_w4, by = c("country", "year", "ccode", "scale")) 
+
+africa_w4_final <- africa_w4_final %>%
+  full_join(groups_corruption_afr_w4, by = c("country", "year", "ccode", "scale")) 
+
+africa_w4_final <- africa_w4_final %>%
+  full_join(sat_dem_afr_w4, by = c("country", "year", "ccode", "scale")) 
+
+names(africa_w4_final)
+africa_w4_final <- select(africa_w4_final, -c(cnt.x, cnt.y, cnt.x.x, cnt.y.y))
+
+```
+
+Wave 5
+
+```{r}
+merged_r5_data <- read_sav("Data bases/Africanbarometer/merged_r5_data.sav")
+names(merged_r5_data)
+```
+
+```{r}
+merged_r5_data$country <- as.numeric(merged_r5_data$COUNTRY_ALPHA)
+table(merged_r5_data$country)
+
+merged_r5_data <- merged_r5_data %>%
+  mutate(country = recode(country,
+                          "1" = "Algeria",
+                          "2" = "Benin",
+                          "3" = "Botswana",
+                          "4" = "Burkina Faso",
+                          "5" = "Burundi",
+                          "6" = "Cameroon",
+                          "7" = "Cape Verde",
+                          "8" = "Cote d’Ivoire",
+                          "9" = "Egypt",
+                          "11" = "Ghana",
+                          "12" = "Guinea",
+                          "13" = "Kenya",
+                          "14" = "Lesotho",
+                          "15" = "Liberia",
+                          "16" = "Madagascar",
+                          "17" = "Malawi",
+                          "18" = "Mali",
+                          "19" = "Mauritius",
+                          "20" = "Morocco",
+                          "21" = "Mozambique",
+                          "22" = "Namibia",
+                          "23" = "Niger",
+                          "24" = "Nigeria",
+                          "25" = "Senegal",
+                          "26" = "Sierra Leone",
+                          "27" = "South Africa",
+                          "28" = "Sudan",
+                          "29" = "Swaziland",
+                          "30" = "Tanzania",
+                          "31" = "Togo",
+                          "32" = "Tunisia",
+                          "33" = "Uganda",
+                          "34" = "Zambia",
+                          "35" = "Zimbabwe"))
+
+table(merged_r5_data$country)
+
+# Create country code
+merged_r5_data$ccode <- NA
+merged_r5_data$ccode <- countrycode(merged_r5_data$country, origin = "country.name",
+                                    destination = "cown", warn = TRUE)
+```
+```{r}
+table(merged_r5_data$DATEINTR)
+
+merged_r5_data$year <- format(as.Date(merged_r5_data$DATEINTR, format="%Y-%m-%d"),"%Y")
+
+table(merged_r5_data$year)
+table(merged_r5_data$year, merged_r5_data$country)
+```
+
+Question Number: Q59A
+**Question: How much do you trust each of the following, or haven’t you heard enough about them to say:
+The President/Prime Minister?
+Variable Label: Trust key leadership figure (President/Prime Minister)
+Values: 0-3, 9, 998, -1
+Value Labels: 0=Not at all, 1=Just a little, 2=Somewhat, 3=A lot, 9=Don’t know/Haven’t heard enough,
+997=Not asked, 998=Refused to answer, -1=Missing
+```{r}
+table(merged_r5_data$Q59A)
+merged_r5_data$Q59A <- as.numeric(merged_r5_data$Q59A)
+
+merged_r5_data$Q59A <- recode(merged_r5_data$Q59A,
+                             "0" = 1,
+                             "1" = 2,
+                             "2" = 3,
+                             "3" = 4,
+                             "-1" = 99)
+
+merged_r5_data <- 
+  merged_r5_data %>% 
+  mutate(conf_gov = replace(Q59A, Q59A >= 5, NA))
+
+table(merged_r5_data$conf_gov)
+```
+
+
+Question Number: Q59J
+Question: How much do you trust each of the following, or haven’t you heard enough about them to say:
+Courts of law?
+Variable Label: Trust courts of law
+Values: 0-3, 9, 998, -1
+Value Labels: 0=Not at all, 1=Just a little, 2=Somewhat, 3=A lot, 9=Don’t know/Haven’t heard enough,
+998=Refused to answer, -1=Missing
+```{r}
+table(merged_r5_data$Q59J)
+merged_r5_data$Q59J <- as.numeric(merged_r5_data$Q59J)
+
+merged_r5_data$Q59J <- recode(merged_r5_data$Q59J,
+                             "0" = 1,
+                             "1" = 2,
+                             "2" = 3,
+                             "3" = 4,
+                             "-1" = 99)
+
+merged_r5_data <- 
+  merged_r5_data %>% 
+  mutate(conf_just = replace(Q59J, Q59J >= 5, NA))
+
+table(merged_r5_data$conf_just)
+```
+
+Question Number: Q65K
+Question: How well or badly would you say the current government is handling the following matters, or
+haven’t you heard enough to say: Fighting corruption in government?
+Variable Label: Handling fighting corruption
+Values: 1-4, 9, 998, -1
+Value Labels: 1=Very badly, 2=Fairly badly, 3=Fairly well, 4=Very well, 9=Don’t know/Haven’t heard enough,
+998=Refused to answer, -1=Missing.
+```{r}
+table(merged_r5_data$Q65K)
+merged_r5_data$Q65K <- as.numeric(merged_r5_data$Q65K)
+
+merged_r5_data <- 
+  merged_r5_data %>% 
+  mutate(fight_corruption = replace(Q65K, Q65K > 5 | Q65K <=-1, NA))
+
+table(merged_r5_data$fight_corruption)
+```
+
+
+Question Number: Q60C
+Question: How many of the following people do you think are involved in corruption, or haven’t you heard
+enough about them to say: Government Officials?
+Values: 0-3, 9, 998, -1
+Value Labels: 0=None, 1=Some of them, 2=Most of them, 3=All of them, 9=Don’t know, 998=Refused to answer,
+-1=Missing data
+```{r}
+table(merged_r5_data$Q60C)
+
+merged_r5_data$Q60C <- as.numeric(merged_r5_data$Q60C)
+
+merged_r5_data$groups_corruption <- recode(merged_r5_data$Q60C,
+                             "0" = 1,
+                             "1" = 2,
+                             "2" = 3,
+                             "3" = 4,
+                             "-1" = 99)
+
+merged_r5_data <- 
+  merged_r5_data %>% 
+  mutate(groups_corruption = replace(groups_corruption, groups_corruption >= 5, NA))
+
+table(merged_r5_data$groups_corruption)
+```
+
+
+Question Number: Q43
+**Question: Overall, how satisfied are you with the way democracy works in the country? Are you:
+Variable Label: Satisfaction with democracy
+Values: 0-4, 9, 998, -1
+**Value Labels: 0=the country is not a democracy, 1=Not at all satisfied, 2=Not very satisfied, 3=Fairly
+satisfied, 4=Very satisfied, 9=Don’t know, 998=Refused to answer, -1=Missing
+```{r}
+table(merged_r5_data$Q43)
+
+merged_r5_data$Q43 <- as.numeric(merged_r5_data$Q43)
+
+merged_r5_data$sat_dem <- recode(merged_r5_data$Q43,
+                             "-1" = 99,
+                             "0" = 99)
+
+merged_r5_data <- 
+  merged_r5_data %>% 
+  mutate(sat_dem = replace(sat_dem, sat_dem >= 5, NA))
+
+table(merged_r5_data$sat_dem)
+```
+
+Join
+```{r}
+conf_gov_afr_w5 <- merged_r5_data %>%
+  group_by(country, year, ccode, conf_gov) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_gov = round(cnt / sum(cnt), 3))
+
+conf_just_afr_w5 <- merged_r5_data %>%
+  group_by(country, year, ccode, conf_just) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_just = round(cnt / sum(cnt), 3))
+
+fight_corruption_afr_w5 <- merged_r5_data %>%
+  group_by(country, year, ccode, fight_corruption) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_fight_corr = round(cnt / sum(cnt), 3))
+
+groups_corruption_afr_w5 <- merged_r5_data %>%
+  group_by(country, year, ccode, groups_corruption) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_groups_corr = round(cnt / sum(cnt), 3))
+
+sat_dem_afr_w5 <- merged_r5_data %>%
+  group_by(country, year, ccode, sat_dem) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_sat_dem = round(cnt / sum(cnt), 3))
+
+conf_gov_afr_w5 <- rename(conf_gov_afr_w5, scale = conf_gov)
+conf_just_afr_w5 <- rename(conf_just_afr_w5, scale = conf_just)
+fight_corruption_afr_w5 <- rename(fight_corruption_afr_w5, scale = fight_corruption)
+groups_corruption_afr_w5 <- rename(groups_corruption_afr_w5, scale = groups_corruption)
+sat_dem_afr_w5 <- rename(sat_dem_afr_w5, scale = sat_dem)
+
+africa_w5_final <- conf_gov_afr_w5 %>%
+  full_join(conf_just_afr_w5, by = c("country", "year", "ccode", "scale")) 
+
+africa_w5_final <- africa_w5_final %>%
+  full_join(fight_corruption_afr_w5, by = c("country", "year", "ccode", "scale")) 
+
+africa_w5_final <- africa_w5_final %>%
+  full_join(groups_corruption_afr_w5, by = c("country", "year", "ccode", "scale")) 
+
+africa_w5_final <- africa_w5_final %>%
+  full_join(sat_dem_afr_w5, by = c("country", "year", "ccode", "scale")) 
+
+names(africa_w5_final)
+africa_w5_final <- select(africa_w5_final, -c(cnt.x, cnt.y, cnt.x.x, cnt.y.y))
+
+```
+
+Wave 6
+```{r}
+merged_r6_data <- haven::read_sav("Data bases/Africanbarometer/merged_r6_data.sav", encoding="latin1")
+
+merged_r6_data <- haven::read_sav("Data bases/Africanbarometer/merged_r6_data.sav", col_select = "Q29B", skip = 39618, n_max = 1)
+names(merged_r5_data)
+```
+
+Wave 7
+```{r}
+merged_r7_data <- read_sav("Data bases/Africanbarometer/merged_r7_data.sav")
+names(merged_r7_data)
+```
+
+```{r}
+merged_r7_data$country <- as.numeric(merged_r7_data$COUNTRY)
+table(merged_r7_data$country)
+
+merged_r7_data <- merged_r7_data %>%
+  mutate(country = recode(country,
+                          "1" = "Benin",
+                          "2" = "Botswana",
+                          "3" = "Burkina Faso",
+                          "4" = "Cape Verde",
+                          "5" = "Cameroon",
+                          "6" = "Cote d’Ivoire",
+                          "7" = "Swaziland",
+                          "8" = "Gabon",
+                          "9" = "Gambia",
+                          "10" = "Ghana",
+                          "11" = "Guinea",
+                          "12" = "Kenya",
+                          "13" = "Lesotho",
+                          "14" = "Liberia",
+                          "15" = "Madagascar",
+                          "16" = "Malawi",
+                          "17" = "Mali",
+                          "18" = "Mauritius",
+                          "19" = "Morocco",
+                          "20" = "Mozambique",
+                          "21" = "Namibia",
+                          "22" = "Niger",
+                          "23" = "Nigeria",
+                          "24" = "Sao Tomé and Príncipe",
+                          "25" = "Senegal",
+                          "26" = "Sierra Leone",
+                          "27" = "South Africa",
+                          "28" = "Sudan",
+                          "29" = "Tanzania",
+                          "30" = "Togo",
+                          "31" = "Tunisia",
+                          "32" = "Uganda",
+                          "33" = "Zambia",
+                          "34" = "Zimbabwe"))
+
+table(merged_r7_data$country)
+
+# Create country code
+merged_r7_data$ccode <- NA
+merged_r7_data$ccode <- countrycode(merged_r7_data$country, origin = "country.name",
+                                    destination = "cown", warn = TRUE)
+```
+```{r}
+table(merged_r7_data$DATEINTR)
+
+merged_r7_data$year <- format(as.Date(merged_r7_data$DATEINTR, format="%Y-%m-%d"),"%Y")
+
+table(merged_r7_data$year)
+table(merged_r7_data$year, merged_r7_data$country)
+```
+
+Question Number: Q43A
+Question: How much do you trust each of the following, or haven’t you heard enough about them to say:
+The President?
+Variable Label: Q43a. Trust president
+Values: 0-3, 9, 8, -1
+Value Labels: 0=Not at all, 1=Just a little, 2=Somewhat, 3=A lot, 9=Don’t know/Haven’t heard enough,
+8=Refused to answer, -1=Missing 
+```{r}
+table(merged_r7_data$Q43A)
+merged_r7_data$Q43A <- as.numeric(merged_r7_data$Q43A)
+
+merged_r7_data$Q43A <- recode(merged_r7_data$Q43A,
+                             "0" = 1,
+                             "1" = 2,
+                             "2" = 3,
+                             "3" = 4,
+                             "-1" = 99)
+
+merged_r7_data <- 
+  merged_r7_data %>% 
+  mutate(conf_gov = replace(Q43A, Q43A >= 5, NA))
+
+table(merged_r7_data$conf_gov)
+```
+
+
+Question Number: Q43I
+Question: How much do you trust each of the following, or haven’t you heard enough about them to say:
+Courts of law?
+Variable Label: Q43i. Trust courts of law
+Values: 0-3, 9, 8, -1
+Value Labels: 0=Not at all, 1=Just a little, 2=Somewhat, 3=A lot, 9=Don’t know/Haven’t heard enough,
+8=Refused to answer, -1=Missing 
+```{r}
+table(merged_r7_data$Q43I)
+merged_r7_data$Q43I <- as.numeric(merged_r7_data$Q43I)
+
+merged_r7_data$Q43I <- recode(merged_r7_data$Q43I,
+                             "0" = 1,
+                             "1" = 2,
+                             "2" = 3,
+                             "3" = 4,
+                             "-1" = 99)
+
+merged_r7_data <- 
+  merged_r7_data %>% 
+  mutate(conf_just = replace(Q43I, Q43I >= 5, NA))
+
+table(merged_r7_data$conf_just)
+```
+
+Question Number: Q56K
+Question: How well or badly would you say the current government is handling the following matters, or
+haven’t you heard enough to say: Fighting corruption in government?
+Variable Label: Q56k. Handling fighting corruption
+Values: 1-4, 9, 8, -1
+Value Labels: 1=Very badly, 2=Fairly badly, 3=Fairly well, 4=Very well, 9=Don’t know/Haven’t heard enough,
+8=Refused to answer, -1=Missing
+```{r}
+table(merged_r7_data$Q56K)
+merged_r7_data$Q56K <- as.numeric(merged_r7_data$Q56K)
+
+merged_r7_data <- 
+  merged_r7_data %>% 
+  mutate(fight_corruption = replace(Q56K, Q56K > 5 | Q56K <=-1, NA))
+
+table(merged_r7_data$fight_corruption)
+```
+
+
+Question Number: Q44C
+Question: How many of the following people do you think are involved in corruption, or haven’t you heard
+enough about them to say: Government officials?
+Variable Label: Q44c. Corruption: government officials
+Values: 0-3, 9, 8, -1
+Value Labels: 0=None, 1=Some of them, 2=Most of them, 3=All of them, 9=Don’t know/Haven’t heard
+enough, 8=Refused to answer, -1=Missing.
+```{r}
+table(merged_r7_data$Q44C)
+
+merged_r7_data$Q44C <- as.numeric(merged_r7_data$Q44C)
+
+merged_r7_data$groups_corruption <- recode(merged_r7_data$Q44C,
+                             "0" = 1,
+                             "1" = 2,
+                             "2" = 3,
+                             "3" = 4,
+                             "-1" = 99)
+
+merged_r7_data <- 
+  merged_r7_data %>% 
+  mutate(groups_corruption = replace(groups_corruption, groups_corruption >= 5, NA))
+
+table(merged_r7_data$groups_corruption)
+```
+
+
+Question Number: Q36
+Question: Overall, how satisfied are you with the way democracy works in [ENTER COUNTRY]? Are you:
+Variable Label: Q36. Satisfaction with democracy
+Values: 0-4, 9, 8, -1
+Value Labels: 0=[Country] is not a democracy, 1=Not at all satisfied, 2=Not very satisfied, 3=Fairly satisfied,
+4=Very satisfied, 9=Don’t know, 8=Refused to answer, -1=Missing 
+```{r}
+table(merged_r7_data$Q36)
+
+merged_r7_data$Q36 <- as.numeric(merged_r7_data$Q36)
+
+merged_r7_data$sat_dem <- recode(merged_r7_data$Q36,
+                             "-1" = 99,
+                             "0" = 99)
+
+merged_r7_data <- 
+  merged_r7_data %>% 
+  mutate(sat_dem = replace(sat_dem, sat_dem >= 5, NA))
+
+table(merged_r7_data$sat_dem)
+```
+
+```{r}
+conf_gov_afr_w7 <- merged_r7_data %>%
+  group_by(country, year, ccode, conf_gov) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_gov = round(cnt / sum(cnt), 3))
+
+conf_just_afr_w7 <- merged_r7_data %>%
+  group_by(country, year, ccode, conf_just) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_just = round(cnt / sum(cnt), 3))
+
+fight_corruption_afr_w7 <- merged_r7_data %>%
+  group_by(country, year, ccode, fight_corruption) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_fight_corr = round(cnt / sum(cnt), 3))
+
+groups_corruption_afr_w7 <- merged_r7_data %>%
+  group_by(country, year, ccode, groups_corruption) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_groups_corr = round(cnt / sum(cnt), 3))
+
+sat_dem_afr_w7 <- merged_r7_data %>%
+  group_by(country, year, ccode, sat_dem) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_sat_dem = round(cnt / sum(cnt), 3))
+
+conf_gov_afr_w7 <- rename(conf_gov_afr_w7, scale = conf_gov)
+conf_just_afr_w7 <- rename(conf_just_afr_w7, scale = conf_just)
+fight_corruption_afr_w7 <- rename(fight_corruption_afr_w7, scale = fight_corruption)
+groups_corruption_afr_w7 <- rename(groups_corruption_afr_w7, scale = groups_corruption)
+sat_dem_afr_w7 <- rename(sat_dem_afr_w7, scale = sat_dem)
+
+africa_w7_final <- conf_gov_afr_w7 %>%
+  full_join(conf_just_afr_w7, by = c("country", "year", "ccode", "scale")) 
+
+africa_w7_final <- africa_w7_final %>%
+  full_join(fight_corruption_afr_w7, by = c("country", "year", "ccode", "scale")) 
+
+africa_w5_final <- africa_w7_final %>%
+  full_join(groups_corruption_afr_w7, by = c("country", "year", "ccode", "scale")) 
+
+africa_w7_final <- africa_w7_final %>%
+  full_join(sat_dem_afr_w7, by = c("country", "year", "ccode", "scale")) 
+
+names(africa_w7_final)
+africa_w7_final <- select(africa_w7_final, -c(cnt.x, cnt.y, cnt.x.x, cnt.y.y))
+```
+
+### Merge all Africabarometer
+```{r}
+africa_final <- africa_w1_final %>%
+  full_join(africa_w2_final)
+
+africa_final <- africa_final %>%
+  full_join(africa_w3_final)
+
+africa_final <- africa_final %>%
+  full_join(africa_w4_final)
+
+africa_final <- africa_final %>%
+  full_join(africa_w5_final)
+
+africa_final <- africa_final %>%
+  full_join(africa_w7_final)
+
+table(africa_final$country, africa_final$year)
+
+```
+
+
+# LAPOP
+```{r}
+lapop <- read_dta("Data bases/LAPOP/lapop.dta")
+names(lapop)
+```
+
+```{r}
+table(lapop$pais)
+```
+
+
+```{r}
+lapop$country <- as.numeric(lapop$pais)
+table(lapop$country)
+
+lapop <- lapop %>%
+  mutate(country = recode(country,
+                          "1" = "Mexico",
+                          "2" = "Guatemala",
+                          "3" = "El Salvador",
+                          "4" = "Honduras",
+                          "5" = "Nicaragua",
+                          "6" = "Costa Rica",
+                          "7" = "Panama",
+                          "8" = "Colombia",
+                          "9" = "Ecuador",
+                          "10" = "Bolivia",
+                          "11" = "Peru",
+                          "12" = "Paraguay",
+                          "13" = "Chile",
+                          "14" = "Uruguay",
+                          "15" = "Brazil",
+                          "16" = "Venezuela",
+                          "17" = "Argentina",
+                          "21" = "Dominican Republic",
+                          "22" = "Haiti",
+                          "23" = "Jamaica",
+                          "24" = "Guyana",
+                          "25" = "Trinidad and Tobago",
+                          "26" = "Belize",
+                          "27" = "Surinam",
+                          "28" = "Bahamas",
+                          "29" = "Barbados",
+                          "40" = "USA",
+                          "41" = "Canada"))
+
+table(lapop$country)
+
+# Create country code
+lapop$ccode <- NA
+lapop$ccode <- countrycode(lapop$country, origin = "country.name",
+                                    destination = "cown", warn = TRUE)
+```
+
+b14
+ ¿Hasta qué punto tiene confianza usted en Gobierno?
+ To what extent do you trust the government?
+1 Nada
+2
+3
+4
+5
+6
+7 Mucho
+.a No sabe
+.b No responde
+.z No se le preguntó en este país o año
+```{r}
+table(lapop$b14)
+lapop$b14 <- as.numeric(lapop$b14)
+
+lapop$conf_gov <- recode(lapop$b14,
+                     "1" = 1,
+                     "2" = 1,
+                     "3" = 2,
+                     "4" = 2,
+                     "5" = 3,
+                     "6" = 4,
+                     "7" = 4)
+
+table(lapop$conf_gov)
+```
+
+
+b10a
+ ¿Hasta qué punto tiene confianza en el sistema de justicia?
+ To what extent do you trust the justice system?
+ 1 Nada
+2
+3
+4
+5
+6
+7 Mucho
+.a No sabe
+.b No responde
+.z No se le preguntó en este país o año
+```{r}
+table(lapop$b10a)
+lapop$b10a <- as.numeric(lapop$b10a)
+
+lapop$conf_just <- recode(lapop$b10a,
+                     "1" = 1,
+                     "2" = 1,
+                     "3" = 2,
+                     "4" = 2,
+                     "5" = 3,
+                     "6" = 4,
+                     "7" = 4)
+
+table(lapop$conf_just)
+```
+
+pc2 corrupción ministros
+pc2
+1 Muy corruptos
+2
+3
+4
+5
+6
+7
+8
+9
+10 Muy honrados
+.a No sabe
+.c No Aplica
+.z No se le preguntó en este país o año
+```{r}
+table(lapop$pc2)
+
+lapop$pc2 <- as.numeric(lapop$pc2)
+
+lapop$groups_corruption <- recode(lapop$pc2,
+                             "10" = 1,
+                             "9" = 1,
+                             "8" = 1,
+                             "7" = 2,
+                             "6" = 2,
+                             "5" = 3,
+                             "4" = 3,
+                             "3" = 4,
+                             "2" = 4,
+                             "1" = 4)
+
+table(lapop$groups_corruption)
+```
+
+
+satisfacción democracia
+pn4
+1 Muy satisfecho(a)
+2 Satisfecho(a)
+3 Insatisfecho(a)
+4 Muy insatisfecho(a)
+```{r}
+table(lapop$pn4)
+
+lapop$pn4 <- as.numeric(lapop$pn4)
+
+lapop$sat_dem <- recode(lapop$pn4,
+                        "4" = 1,
+                        "3" = 2,
+                        "2" = 3,
+                        "1" = 4)
+
+table(lapop$sat_dem)
+```
+
+```{r}
+conf_gov_lapop <- lapop %>%
+  group_by(country, year, ccode, conf_gov) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_gov = round(cnt / sum(cnt), 3))
+
+conf_just_lapop <- lapop %>%
+  group_by(country, year, ccode, conf_just) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_conf_just = round(cnt / sum(cnt), 3))
+
+groups_corruption_lapop <- lapop %>%
+  group_by(country, year, ccode, groups_corruption) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_groups_corr = round(cnt / sum(cnt), 3))
+
+sat_dem_lapop <- lapop %>%
+  group_by(country, year, ccode, sat_dem) %>%
+  summarize(cnt = n()) %>% # add percentages
+  drop_na() %>%
+  mutate(per_sat_dem = round(cnt / sum(cnt), 3))
+
+conf_gov_lapop <- rename(conf_gov_lapop, scale = conf_gov)
+conf_just_lapop <- rename(conf_just_lapop, scale = conf_just)
+groups_corruption_lapop <- rename(groups_corruption_lapop, scale = groups_corruption)
+sat_dem_lapop <- rename(sat_dem_lapop, scale = sat_dem)
+
+lapop_final <- conf_gov_lapop %>%
+  full_join(conf_just_lapop, by = c("country", "year", "ccode", "scale")) 
+
+lapop_final <- lapop_final %>%
+  full_join(groups_corruption_lapop, by = c("country", "year", "ccode", "scale")) 
+
+lapop_final <- lapop_final %>%
+  full_join(sat_dem_lapop, by = c("country", "year", "ccode", "scale")) 
+
+names(lapop_final)
+lapop_final <- select(lapop_final, -c(cnt.x, cnt.y, cnt.x.x, cnt.y.y))
+```
+
+# Latinobarometer
+
+```{r}
+conf_just_latinobarometro <- read_excel("Data bases/Latinobarómetro/conf_just_latinobarometro.xlsx")
+sat_dem_latinobarometro <- read_excel("Data bases/Latinobarómetro/sat_dem_latinobarometro.xlsx")
+extent_corruption_latinobarometro <- read_excel("Data bases/Latinobarómetro/extent_corruption_latinobarometro.xlsx")
+
+conf_gov_latinobarometro <- read_excel("Data bases/Latinobarómetro/conf_gov_latinobarometro.xlsx")
+fight_corruption_latinobarometro <- read_excel("Data bases/Latinobarómetro/fight_corruption_latinobarometro.xlsx")
+```
+
+# Join all databases
+
+africa_final 
+```{r}
+table(africa_final$country, africa_final$year)
+```
+arab_final
+```{r}
+table(arab_final$country, arab_final$year)
+```
+lapop_final
+```{r}
+table(lapop_final$country, lapop_final$year)
+```
+wvs_final
+```{r}
+table(wvs_final$country, wvs_final$year)
+```
+
+```{r}
+africa_final$year <- as.numeric(africa_final$year)
+arab_final$year <- as.numeric(arab_final$year)
+
+final_db <- africa_final %>%
+  full_join(arab_final)
+
+final_db <- final_db %>%
+  full_join(lapop_final)
+
+final_db <- final_db %>%
+  full_join(wvs_final) %>%
+  select(-c(cnt.x, cnt.y, cnt.x.x, cnt.y.y))
+
+rm(list= ls()[!(ls() %in% c("africa_final","arab_final", "lapop_final", "wvs_final", "final_db"))])
+
+table(final_db$country)
+names(final_db)
+```
+
+Save in excel
+```{r}
+write_xlsx(final_db,"final_db.xlsx")
+```
+
+
+# Organize the data in long format
+
+## First variable: corruption perception
+
+A mix between per_ext_corr, per_fight_corr, per_groups_corr, and per_scale_corr
+
+Only scale == 4
+
+### per_ext_corr
+
+Africabarometer
+```{r}
+extent_corruption_africa <- afr_w1_extent_corruption
+
+# Create variable Sample
+extent_corruption_africa <- extent_corruption_africa %>%
+  group_by(country) %>%
+  mutate(uni=length(unique(year))) %>%
+  group_by(country, year) %>%
+  mutate(sample =sum(cnt)) %>%
+  ungroup %>%
+  select(-uni)
+
+# Keep only scale == 4
+
+extent_corruption_africa <- extent_corruption_africa %>%
+  filter(scale == 4) %>%
+  select(-c(cnt)) %>%
+  rename(response = per_ext_corr)
+
+extent_corruption_africa$item <- "extent_corruption"
+extent_corruption_africa$project <- "africabarometer"
+head(extent_corruption_africa)
+
+#extent_corruption_africa <- extent_corruption_africa %>%
+#  rename(response = per_ext_corr)
+
+```
+
+
+Arab Barometer
+```{r}
+extent_corruption_arab <- arab_w4_extent_corruption %>%
+  full_join(arab_w5_extent_corruption)
+
+extent_corruption_arab <- extent_corruption_arab %>%
+  full_join(arab_w6_extent_corruption)
+
+# Create variable Sample
+extent_corruption_arab <- extent_corruption_arab %>%
+  group_by(country) %>%
+  mutate(uni=length(unique(year))) %>%
+  group_by(country, year) %>%
+  mutate(sample =sum(cnt)) %>%
+  ungroup %>%
+  select(-uni)
+
+# Keep only scale == 4
+
+extent_corruption_arab <- extent_corruption_arab %>%
+  filter(scale == 4) %>%
+  select(-c(cnt)) %>%
+  rename(response = per_ext_corr)
+
+extent_corruption_arab$item <- "extent_corruption"
+extent_corruption_arab$project <- "arabbarometer"
+head(extent_corruption_arab)
+```
+
+LAPOP only has groups_corruption
+
+WVS
+```{r}
+# Create variable Sample
+extent_corruption_wvs <- wvs_extent_corruption %>%
+  group_by(country) %>%
+  mutate(uni=length(unique(year))) %>%
+  group_by(country, year) %>%
+  mutate(sample =sum(cnt)) %>%
+  ungroup %>%
+  select(-uni)
+
+# Keep only scale == 4
+extent_corruption_wvs <- extent_corruption_wvs %>%
+  filter(scale == 4) %>%
+  select(-c(cnt)) %>%
+  rename(response = per_extent_corr)
+
+extent_corruption_wvs$item <- "extent_corruption"
+extent_corruption_wvs$project <- "wvs"
+head(extent_corruption_wvs)
+```
+
+Latinobarometro
+```{r}
+# Create variable Sample
+extent_corruption_latinobarometro <- extent_corruption_latinobarometro %>%
+  group_by(country) %>%
+  mutate(uni=length(unique(year))) %>%
+  group_by(country, year) %>%
+  mutate(sample =sum(cnt)) %>%
+  ungroup %>%
+  select(-uni)
+
+# Keep only scale == 4
+
+extent_corruption_latinobarometro <- extent_corruption_latinobarometro %>%
+  filter(scale == 4) %>%
+  select(-c(cnt)) %>%
+  rename(response = per_ext_corr)
+
+extent_corruption_latinobarometro$item <- "extent_corruption"
+extent_corruption_latinobarometro$project <- "latinobarometro"
+head(extent_corruption_latinobarometro)
+```
+
+### per_fight_corr
+
+Africabarometer
+```{r}
+fight_corruption_africa <- afr_w1_fight_corruption %>%
+  full_join(fight_corruption_afr_w2)
+
+fight_corruption_africa <- fight_corruption_africa %>%
+  full_join(fight_corruption_afr_w3)
+
+fight_corruption_africa <- fight_corruption_africa %>%
+  full_join(fight_corruption_afr_w4)
+
+fight_corruption_africa <- fight_corruption_africa %>%
+  full_join(fight_corruption_afr_w5)
+
+fight_corruption_africa <- fight_corruption_africa %>%
+  full_join(fight_corruption_afr_w7)
+
+# Create variable Sample
+fight_corruption_africa <- fight_corruption_africa %>%
+  group_by(country) %>%
+  mutate(uni=length(unique(year))) %>%
+  group_by(country, year) %>%
+  mutate(sample =sum(cnt)) %>%
+  ungroup %>%
+  select(-uni)
+
+# Keep only scale == 4
+fight_corruption_africa <- fight_corruption_africa %>%
+  filter(scale == 4) %>%
+  select(-c(cnt)) %>%
+  rename(response = per_fight_corr)
+
+fight_corruption_africa$item <- "fight_corruption"
+fight_corruption_africa$project <- "africabarometer"
+head(fight_corruption_africa)
+```
+
+Arab barometer
+
+```{r}
+fight_corruption_arab <- arab_w1_fight_corruption %>%
+  full_join(arab_w2_fight_corruption)
+
+fight_corruption_arab <- fight_corruption_arab %>%
+  full_join(arab_w3_fight_corruption)
+
+fight_corruption_arab <- fight_corruption_arab %>%
+  full_join(arab_w4_fight_corruption)
+
+fight_corruption_arab <- fight_corruption_arab %>%
+  full_join(arab_w5_fight_corruption)
+
+# Create variable Sample
+fight_corruption_arab <- fight_corruption_arab %>%
+  group_by(country) %>%
+  mutate(uni=length(unique(year))) %>%
+  group_by(country, year) %>%
+  mutate(sample =sum(cnt)) %>%
+  ungroup %>%
+  select(-uni)
+
+# Keep only scale == 4
+fight_corruption_arab <- fight_corruption_arab %>%
+  filter(scale == 4) %>%
+  select(-c(cnt)) %>%
+  rename(response = per_fight_corr)
+
+fight_corruption_arab$item <- "fight_corruption"
+fight_corruption_arab$project <- "arabbarometer"
+
+head(fight_corruption_arab)
+```
+
+WVS doesn't have fight corruption
+
+Latinobarometro
+```{r}
+# Create variable Sample
+fight_corruption_latinobarometro <- fight_corruption_latinobarometro %>%
+  group_by(country) %>%
+  mutate(uni=length(unique(year))) %>%
+  group_by(country, year) %>%
+  mutate(sample =sum(cnt)) %>%
+  ungroup %>%
+  select(-uni)
+
+# Keep only scale == 4
+fight_corruption_latinobarometro <- fight_corruption_latinobarometro %>%
+  filter(scale == 4) %>%
+  select(-c(cnt)) %>%
+  rename(response = per_fight_corr)
+
+fight_corruption_latinobarometro$item <- "fight_corruption"
+fight_corruption_latinobarometro$project <- "latinobarometro"
+head(fight_corruption_latinobarometro)
+```
+
+### per_groups_corr
+
+Africabarometer
+```{r}
+groups_corruption_africa <- afr_w1_groups_corruption %>%
+  full_join(groups_corruption_afr_w2)
+
+groups_corruption_africa <- groups_corruption_africa %>%
+  full_join(groups_corruption_afr_w3)
+
+groups_corruption_africa <- groups_corruption_africa %>%
+  full_join(groups_corruption_afr_w4)
+
+groups_corruption_africa <- groups_corruption_africa %>%
+  full_join(groups_corruption_afr_w5)
+
+groups_corruption_africa <- groups_corruption_africa %>%
+  full_join(groups_corruption_afr_w7)
+
+# Create variable Sample
+groups_corruption_africa <- groups_corruption_africa %>%
+  group_by(country) %>%
+  mutate(uni=length(unique(year))) %>%
+  group_by(country, year) %>%
+  mutate(sample =sum(cnt)) %>%
+  ungroup %>%
+  select(-uni)
+
+# Keep only scale == 4
+groups_corruption_africa <- groups_corruption_africa %>%
+  filter(scale == 4) %>%
+  select(-c(cnt)) %>%
+  rename(response = per_groups_corr)
+
+groups_corruption_africa$item <- "groups_corruption"
+groups_corruption_africa$project <- "africabarometer"
+head(groups_corruption_africa)
+```
+
+Arabbarometer doesn't have groups corruption
+
+LAPOP
+```{r}
+# Create variable Sample
+groups_corruption_lapop_filter <- groups_corruption_lapop %>%
+  group_by(country) %>%
+  mutate(uni=length(unique(year))) %>%
+  group_by(country, year) %>%
+  mutate(sample =sum(cnt)) %>%
+  ungroup %>%
+  select(-uni)
+
+# Keep only scale == 4
+groups_corruption_lapop_filter <- groups_corruption_lapop_filter %>%
+  filter(scale == 4) %>%
+  select(-c(cnt)) %>%
+  rename(response = per_groups_corr)
+
+groups_corruption_lapop_filter$item <- "groups_corruption"
+groups_corruption_lapop_filter$project <- "lapop"
+head(groups_corruption_lapop_filter)
+```
+
+WVS
+```{r}
+# Create variable Sample
+groups_corruption_wvs <- wvs_groups_corruption %>%
+  group_by(country) %>%
+  mutate(uni=length(unique(year))) %>%
+  group_by(country, year) %>%
+  mutate(sample =sum(cnt)) %>%
+  ungroup %>%
+  select(-uni)
+
+# Keep only scale == 4
+groups_corruption_wvs <- groups_corruption_wvs %>%
+  filter(scale == 4) %>%
+  select(-c(cnt)) %>%
+  rename(response = per_groups_corr)
+
+groups_corruption_wvs$item <- "groups_corruption"
+groups_corruption_wvs$project <- "wvs"
+head(groups_corruption_wvs)
+```
+
+### per_scale_corr
+
+Only WVS has perr_scale_corr
+```{r}
+# Create variable Sample
+scale_corruption_wvs <- wvs_scale_corruption %>%
+  group_by(country) %>%
+  mutate(uni=length(unique(year))) %>%
+  group_by(country, year) %>%
+  mutate(sample =sum(cnt)) %>%
+  ungroup %>%
+  select(-uni)
+
+# Keep only scale == 4
+scale_corruption_wvs <- scale_corruption_wvs %>%
+  filter(scale == 4) %>%
+  select(-c(cnt)) %>%
+  rename(response = per_scale_corr)
+
+scale_corruption_wvs$item <- "scale_corruption"
+scale_corruption_wvs$project <- "wvs"
+head(scale_corruption_wvs)
+```
+
+## Join all the corruption datasets
+```{r}
+corruption_final <- extent_corruption_africa %>%
+  full_join(extent_corruption_arab)
+
+corruption_final$year <- as.numeric(corruption_final$year)
+extent_corruption_wvs$year <- as.numeric(extent_corruption_wvs$year)
+corruption_final <- corruption_final %>%
+  full_join(extent_corruption_wvs)
+
+fight_corruption_africa$year <- as.numeric(fight_corruption_africa$year)
+corruption_final <- corruption_final %>%
+  full_join(fight_corruption_africa)
+
+fight_corruption_arab$year <- as.numeric(fight_corruption_arab$year)
+corruption_final <- corruption_final %>%
+  full_join(fight_corruption_arab)
+
+groups_corruption_lapop_filter$year <- as.numeric(groups_corruption_lapop_filter$year)
+corruption_final <- corruption_final %>%
+  full_join(groups_corruption_lapop_filter)
+
+groups_corruption_wvs$year <- as.numeric(groups_corruption_wvs$year)
+corruption_final <- corruption_final %>%
+  full_join(groups_corruption_wvs)
+
+scale_corruption_wvs$year <- as.numeric(scale_corruption_wvs$year)
+corruption_final <- corruption_final %>%
+  full_join(scale_corruption_wvs)
+
+corruption_final <- corruption_final %>%
+  full_join(extent_corruption_latinobarometro)
+
+corruption_final <- corruption_final %>%
+  full_join(fight_corruption_latinobarometro)
+```
+
+Save in excel
+```{r}
+write_xlsx(corruption_final,"corruption_final_v2.xlsx")
+```
+
+# Government trust
+
+Africabarometer
+```{r}
+conf_gov_africa <- afr_w1_conf_gov %>%
+  full_join(conf_gov_afr_w2)
+
+conf_gov_africa <- conf_gov_africa %>%
+  full_join(conf_gov_afr_w3)
+
+conf_gov_africa <- conf_gov_africa %>%
+  full_join(conf_gov_afr_w4)
+
+conf_gov_africa <- conf_gov_africa %>%
+  full_join(conf_gov_afr_w5)
+
+conf_gov_africa <- conf_gov_africa %>%
+  full_join(conf_gov_afr_w7)
+
+# Create variable Sample
+conf_gov_africa <- conf_gov_africa %>%
+  group_by(country) %>%
+  mutate(uni=length(unique(year))) %>%
+  group_by(country, year) %>%
+  mutate(sample =sum(cnt)) %>%
+  ungroup %>%
+  select(-uni)
+
+# Keep only scale == 4
+conf_gov_africa <- conf_gov_africa %>%
+  filter(scale == 4) %>%
+  select(-c(cnt)) %>%
+  rename(response = per_conf_gov)
+
+conf_gov_africa$item <- "confidence_government"
+conf_gov_africa$project <- "africabarometer"
+head(conf_gov_africa)
+```
+Arab Barometer
+```{r}
+conf_gov_arab <- arab_w1_conf_gov %>%
+  full_join(arab_w2_conf_gov)
+
+conf_gov_arab <- conf_gov_arab %>%
+  full_join(arab_w3_conf_gov)
+
+conf_gov_arab <- conf_gov_arab %>%
+  full_join(arab_w4_conf_gov)
+
+conf_gov_arab <- conf_gov_arab %>%
+  full_join(arab_w5_conf_gov)
+
+conf_gov_arab <- conf_gov_arab %>%
+  full_join(arab_w6_conf_gov)
+
+# Create variable Sample
+conf_gov_arab <- conf_gov_arab %>%
+  group_by(country) %>%
+  mutate(uni=length(unique(year))) %>%
+  group_by(country, year) %>%
+  mutate(sample =sum(cnt)) %>%
+  ungroup %>%
+  select(-uni)
+
+# Keep only scale == 4
+conf_gov_arab <- conf_gov_arab %>%
+  filter(scale == 4) %>%
+  select(-c(cnt)) %>%
+  rename(response = per_conf_gov)
+
+conf_gov_arab$item <- "confidence_government"
+conf_gov_arab$project <- "arabbarometer"
+head(conf_gov_arab)
+```
+LAPOP
+```{r}
+# Create variable Sample
+conf_gov_lapop <- conf_gov_lapop %>%
+  group_by(country) %>%
+  mutate(uni=length(unique(year))) %>%
+  group_by(country, year) %>%
+  mutate(sample =sum(cnt)) %>%
+  ungroup %>%
+  select(-uni)
+
+# Keep only scale == 4
+conf_gov_lapop <- conf_gov_lapop %>%
+  filter(scale == 4) %>%
+  select(-c(cnt)) %>%
+  rename(response = per_conf_gov)
+
+conf_gov_lapop$item <- "confidence_government"
+conf_gov_lapop$project <- "lapop"
+head(conf_gov_lapop)
+```
+Latinobarometro
+```{r}
+# Create variable Sample
+conf_gov_latinobarometro <- conf_gov_latinobarometro %>%
+  group_by(country) %>%
+  mutate(uni=length(unique(year))) %>%
+  group_by(country, year) %>%
+  mutate(sample =sum(cnt)) %>%
+  ungroup %>%
+  select(-uni)
+
+# Keep only scale == 4
+conf_gov_latinobarometro <- conf_gov_latinobarometro %>%
+  filter(scale == 4) %>%
+  select(-c(cnt)) %>%
+  rename(response = per_conf_gov)
+
+conf_gov_latinobarometro$item <- "confidence_government"
+conf_gov_latinobarometro$project <- "latinobarometro"
+head(conf_gov_latinobarometro)
+```
+WVS
+```{r}
+# Create variable Sample
+conf_gov_wvs <- wvs_conf_gov %>%
+  group_by(country) %>%
+  mutate(uni=length(unique(year))) %>%
+  group_by(country, year) %>%
+  mutate(sample =sum(cnt)) %>%
+  ungroup %>%
+  select(-uni)
+
+# Keep only scale == 4
+conf_gov_wvs <- conf_gov_wvs %>%
+  filter(scale == 4) %>%
+  select(-c(cnt)) %>%
+  rename(response = per_conf_gov)
+
+conf_gov_wvs$item <- "confidence_government"
+conf_gov_wvs$project <- "wvs"
+head(conf_gov_wvs)
+```
+Join all databases
+```{r}
+conf_gov_final <- conf_gov_africa %>%
+  full_join(conf_gov_arab)
+
+conf_gov_final$year <- as.numeric(conf_gov_final$year)
+conf_gov_final <- conf_gov_final %>%
+  full_join(conf_gov_lapop)
+
+conf_gov_final <- conf_gov_final %>%
+  full_join(conf_gov_latinobarometro)
+
+conf_gov_final <- conf_gov_final %>%
+  full_join(conf_gov_wvs)
+
+```
+
+Save in excel
+```{r}
+write_xlsx(conf_gov_final,"conf_gov_final.xlsx")
+```
+
+# Judiciary trust
+
+Africabarometer
+```{r}
+conf_just_africa <- afr_w1_conf_just %>%
+  full_join(conf_just_afr_w2)
+
+conf_just_africa <- conf_just_africa %>%
+  full_join(conf_just_afr_w3)
+
+conf_just_africa <- conf_just_africa %>%
+  full_join(conf_just_afr_w4)
+
+conf_just_africa <- conf_just_africa %>%
+  full_join(conf_just_afr_w5)
+
+conf_just_africa <- conf_just_africa %>%
+  full_join(conf_just_afr_w7)
+
+# Create variable Sample
+conf_just_africa <- conf_just_africa %>%
+  group_by(country) %>%
+  mutate(uni=length(unique(year))) %>%
+  group_by(country, year) %>%
+  mutate(sample =sum(cnt)) %>%
+  ungroup %>%
+  select(-uni)
+
+# Keep only scale == 4
+conf_just_africa <- conf_just_africa %>%
+  filter(scale == 4) %>%
+  select(-c(cnt)) %>%
+  rename(response = per_conf_just)
+
+conf_just_africa$item <- "confidence_justice"
+conf_just_africa$project <- "africabarometer"
+head(conf_just_africa)
+```
+Arab Barometer
+```{r}
+conf_just_arab <- arab_w1_conf_just %>%
+  full_join(arab_w2_conf_just)
+
+conf_just_arab <- conf_just_arab %>%
+  full_join(arab_w4_conf_just)
+
+conf_just_arab <- conf_just_arab %>%
+  full_join(arab_w5_conf_just)
+
+conf_just_arab <- conf_just_arab %>%
+  full_join(arab_w6_conf_just)
+
+# Create variable Sample
+conf_just_arab <- conf_just_arab %>%
+  group_by(country) %>%
+  mutate(uni=length(unique(year))) %>%
+  group_by(country, year) %>%
+  mutate(sample =sum(cnt)) %>%
+  ungroup %>%
+  select(-uni)
+
+# Keep only scale == 4
+conf_just_arab <- conf_just_arab %>%
+  filter(scale == 4) %>%
+  select(-c(cnt)) %>%
+  rename(response = per_conf_just)
+
+conf_just_arab$item <- "confidence_justice"
+conf_just_arab$project <- "arabbarometer"
+head(conf_just_arab)
+```
+LAPOP
+```{r}
+# Create variable Sample
+conf_just_lapop <- conf_just_lapop %>%
+  group_by(country) %>%
+  mutate(uni=length(unique(year))) %>%
+  group_by(country, year) %>%
+  mutate(sample =sum(cnt)) %>%
+  ungroup %>%
+  select(-uni)
+
+# Keep only scale == 4
+conf_just_lapop <- conf_just_lapop %>%
+  filter(scale == 4) %>%
+  select(-c(cnt)) %>%
+  rename(response = per_conf_just)
+
+conf_just_lapop$item <- "confidence_justice"
+conf_just_lapop$project <- "lapop"
+head(conf_just_lapop)
+```
+Latinobarometro
+```{r}
+# Create variable Sample
+conf_just_latinobarometro <- conf_just_latinobarometro %>%
+  group_by(country) %>%
+  mutate(uni=length(unique(year))) %>%
+  group_by(country, year) %>%
+  mutate(sample =sum(cnt)) %>%
+  ungroup %>%
+  select(-uni)
+
+# Keep only scale == 4
+conf_just_latinobarometro <- conf_just_latinobarometro %>%
+  filter(scale == 4) %>%
+  select(-c(cnt)) %>%
+  rename(response = per_conf_just)
+
+conf_just_latinobarometro$item <- "confidence_justice"
+conf_just_latinobarometro$project <- "latinobarometro"
+head(conf_just_latinobarometro)
+```
+WVS
+```{r}
+# Create variable Sample
+conf_just_wvs <- wvs_conf_just %>%
+  group_by(country) %>%
+  mutate(uni=length(unique(year))) %>%
+  group_by(country, year) %>%
+  mutate(sample =sum(cnt)) %>%
+  ungroup %>%
+  select(-uni)
+
+# Keep only scale == 4
+conf_just_wvs <- conf_just_wvs %>%
+  filter(scale == 4) %>%
+  select(-c(cnt)) %>%
+  rename(response = per_conf_just)
+
+conf_just_wvs$item <- "confidence_justice"
+conf_just_wvs$project <- "wvs"
+head(conf_just_wvs)
+```
+
+Join with TJ database
+```{r}
+#Add ccodes to other databases
+corruption_est <- read_csv("corruption_est.csv")
+
+corruption_est$country[corruption_est$country == "Brasil"] <- "Brazil"
+corruption_est$country[corruption_est$country == "México"] <- "Mexico"
+
+corruption_est$ccode <- countrycode(corruption_est$country, origin = "country.name",
+                             destination = "cown", warn = TRUE)
+
+
+confidence_government_est <- read_csv("confidence_government_est.csv")
+confidence_government_est$country[confidence_government_est$country == "Brasil"] <- "Brazil"
+confidence_government_est$country[confidence_government_est$country == "México"] <- "Mexico"
+confidence_government_est$ccode <- countrycode(confidence_government_est$country, origin = "country.name",
+                             destination = "cown", warn = TRUE)
+
+confidence_jud <- read_csv("confidence_jud.csv")
+confidence_jud$country[confidence_jud$country == "Brasil"] <- "Brazil"
+confidence_jud$country[confidence_jud$country == "México"] <- "Mexico"
+confidence_jud$ccode <- countrycode(confidence_jud$country, origin = "country.name",
+                             destination = "cown", warn = TRUE)
+
+
+tj <- read_excel("tj_final.xlsx")
+tj <- tj %>% distinct(ccode_year, .keep_all = TRUE)
+
+tj_final <- tj %>%
+  left_join(corruption_est, by = c("ccode", "year")) %>%
+  rename(corr_est = data, first_yr_cor = First_yr) %>%
+  select(-c(data_u95, data_l95, data_sd))
+
+tj_final <- tj_final %>%
+  left_join(confidence_government_est, by = c("ccode", "year")) %>%
+  rename(conf_gov_est = data, first_yr_conf_gov = First_yr) %>%
+  select(-c(data_u95, data_l95, data_sd))
+
+tj_final <- tj_final %>%
+  left_join(confidence_jud, by = c("ccode", "year")) %>%
+  rename(conf_jud_est = data, first_yr_conf_jud = First_yr) %>%
+  select(-c(data_u95, data_l95, data_sd, country.y, country.x.x, country.y.y)) %>%
+  drop_na(ccode)
+
+tj_filtered <- filter(tj_final, inclusion_final_db == 1)
+
+tj_filtered <- tj_filtered %>% distinct(ccode_year, .keep_all = TRUE) %>%
+  rename(country = country.x)
+
+write_xlsx(tj_filtered,"tj_filtered.xlsx")
+```
+
+Identify those countries with no information for conf_jud_est (most populated variable)
+```{r}
+tj_clean <- tj_filtered %>%
+  group_by(country) %>%
+  mutate(conf_jud_mean = mean(conf_jud_est,  na.rm = TRUE)) %>%
+  drop_na(conf_jud_mean) %>%
+  select(-c(conf_jud_mean))
+
+# Plot this
+data_surveys <- panelview(country ~ treated, data = tj_clean,
+                       index = c("country", "year"), main = "",
+                       axis.lab.gap = c(2,0), xlab="", ylab="",
+           legend.labs = c("Post-Transition", "Post-TJ", "Pre-Transition")) +
+   theme_minimal() +
+   theme(legend.title = element_blank(),
+         legend.position = c("bottom"),
+         plot.title = element_text(hjust = 0.5))
+
+data_surveys
+```
+
+
+DID using did package
+```{r}
+set.seed(1814)
+library(did)
+
+# Make plots!
+
+ggplot(tj_filtered, aes(x = factor(tj_in_democracy), y = conf_gov_est)) +
+  stat_summary(geom = "pointrange", size = 1, color = "red",
+               fun.data = "mean_se", fun.args = list(mult = 1.96)) +
+  facet_wrap(vars(treated))
+```
+
+Estimating group ATE
+```{r message=FALSE, warning=FALSE}
+# estimate group-time average treatment effects using att_gt method
+library(did)
+
+tj_filtered <- tj_filtered %>%
+  mutate(firsttreat = if_else(is.na(firsttreat), 0, firsttreat)) # 0 for nontreated
+
+# Add world development indicators from WDI package
+library(remotes)
+install_github('vincentarelbundock/WDI')
+gdp <- WDI(country = "all", indicator = "5.51.01.10.gdp", start = 1970, end = 2021)
+
+attgt_conf_gov <- att_gt(yname = "conf_gov_est",
+                        tname = "year",
+                        idname = "ccode",
+                        gname = "firsttreat",
+                        xformla = ~polity + hdi,
+                        data = tj_filtered,
+                        control_group = "notyettreated"
+                        )
+
+
+# summarize the results
+summary(attgt_conf_gov)
+```
+
+
+```{r}
+# plot the results
+# set ylim so that all plots have the same scale along y-axis
+ggdid(attgt_conf_gov, ylim = c(-.3,.3))
+```
+```{r}
+# aggregate the group-time average treatment effects
+mw.dyn <- aggte(attgt_conf_gov, type = "dynamic", na.rm = TRUE)
+summary(mw.dyn)
+ggdid(mw.dyn, ylim = c(-4,4))
+```
+
+One potential issue with these dynamic effect estimators is that the composition of the groups changes with different lengths of exposure in the event study plots. 
+One way to combat this is to balance the sample by (i) only including groups that are exposed to the treatment for at least a certain number of time periods and (ii) only look at dynamic effects in those time periods.
+```{r}
+mw.dyn.balance <- aggte(attgt_conf_gov, type = "dynamic", balance_e=2, na.rm = TRUE)
+summary(mw.dyn.balance)
+```
+
+```{r}
+ggdid(attgt_conf_gov, ylim = c(-0.2,0.2))
+```
+
+```{r}
+summary(mw.dyn)
+
+data_plot <- tidy(mw.dyn)
+
+plot <- data_plot %>% 
+    mutate(ymin_ptwise = estimate + 1.96*std.error,
+           ymax_ptwise = estimate - 1.96*std.error)%>%
+  ggplot(aes(x=event.time, y =estimate)) +
+  geom_pointrange(aes(ymin = ymin_ptwise, ymax = ymax_ptwise))+ 
+  geom_hline(yintercept =0) +
+  xlab("Event Time") + ylab("Estimate") 
+  #ggtitle("Effect of the implementation of TJ procedures on trust in government")
+
+plot
+```
+
+Dynamic effects and event studies
+
+```{r}
+agg.es <- aggte(attgt_conf_gov, type = "dynamic", na.rm = TRUE)
+summary(agg.es)
+```
+
+```{r}
+ggdid(agg.es)
+```
+
+Group specific effects
+```{r}
+agg.gs <- aggte(attgt_conf_gov, type = "group", na.rm = TRUE)
+summary(agg.gs)
+```
+
+```{r}
+ggdid(agg.gs)
+```
+
+Calendar time effects
+```{r}
+agg.ct <- aggte(attgt_conf_gov, type = "calendar", na.rm = TRUE)
+summary(agg.ct)
+```
+
+```{r}
+ggdid(agg.ct)
+```
+
+With corruption as dependent variable
+
+```{r}
+corruption_attgt <- att_gt(yname = "corr_est",
+                        tname = "year",
+                        idname = "ccode",
+                        gname = "firsttreat",
+                        xformla = ~1,
+                        data = tj_filtered,
+                        control_group = "notyettreated"
+                        )
+
+
+# summarize the results
+summary(corruption_attgt)
+```
+
+```{r}
+# plot the results
+ggdid(corruption_attgt)
+```
+
+Event-study parameters
+```{r}
+mw.dyn2 <- aggte(corruption_attgt, type = "dynamic", na.rm = TRUE)
+
+data_plot2 <- tidy(mw.dyn2)
+
+plot2 <- data_plot2 %>% 
+    mutate(ymin_ptwise = estimate + 1.96*std.error,
+           ymax_ptwise = estimate - 1.96*std.error)%>%
+  ggplot(aes(x=event.time, y =estimate)) +
+  geom_pointrange(aes(ymin = ymin_ptwise, ymax = ymax_ptwise))+ 
+  geom_hline(yintercept =0) +
+  xlab("Event Time") + ylab("Estimate") +
+  xlim(c(-20,20)) 
+
+plot2
+```
+
+Dynamic
+```{r}
+ggdid(mw.dyn2, ylim = c(-.10,.10))
+```
+
+```{r}
+mw.dyn.balance2 <- aggte(corruption_attgt, type = "dynamic", balance_e=1)
+ggdid(mw.dyn.balance2, ylim = c(-.1,.1))
+```
+
+Simple aggregation
+```{r}
+agg.simple2 <- aggte(corruption_attgt, type = "simple")
+summary(agg.simple2)
+```
+
+
+Dynamic effects
+```{r}
+agg.es2 <- aggte(corruption_attgt, type = "dynamic")
+ggdid(agg.es2)
+```
+
+Group specific effects
+```{r}
+agg.gs2 <- aggte(corruption_attgt, type = "group")
+ggdid(agg.gs2, xlim = c(-.5,.5))
+```
+
+Calendar time effects
+```{r}
+agg.ct2 <- aggte(corruption_attgt, type = "calendar")
+ggdid(agg.ct2)
+```
+Interaction between treatment and corruption
+```{r}
+# Separate the sample between low perception of corruption and high?
+
+low_corruption <- tj_filtered %>%
+  filter(corr_est <= 0)
+
+high_corruption <- tj_filtered %>%
+  filter(corr_est >= 0)
+
+interaction_lc <- att_gt(yname = "conf_gov_est",
+                        tname = "year",
+                        idname = "ccode",
+                        gname = "firsttreat",
+                        xformla = ~1,
+                        data = low_corruption,
+                        control_group = "notyettreated"
+                        )
+
+interaction_hg <- att_gt(yname = "conf_gov_est",
+                        tname = "year",
+                        idname = "ccode",
+                        gname = "firsttreat",
+                        xformla = ~1,
+                        data = high_corruption,
+                        control_group = "notyettreated"
+                        )
+
+
+# Simple aggregation
+
+agg_lc <- aggte(interaction_lc, type = "simple")
+agg_hg <- aggte(interaction_hg, type = "simple", na.rm = TRUE)
+
+tidy_agg_lc<- tidy(agg_lc)
+tidy_agg_hg <- tidy(agg_hg)
+
+summary(agg_lc)
+summary(agg_hg)
+
+```
+
+
+
+Paralel trends
+```{r}
+paralell_trends <- tj_filtered %>%
+  mutate(Treated = factor(treated, labels = c("Non Treated", "Treated"))) %>%
+  group_by(Treated, year) %>%
+  summarise(mean_corruption = mean(corr_est,  na.rm = TRUE),
+            se_corruption = sd(mean_corruption) / sqrt(n()),
+            upper = mean_corruption + (1.96 * mean_corruption),
+            lower = mean_corruption + (-1.96 * mean_corruption))
+
+# Figure 4 on manuscript
+ggplot(paralell_trends, aes(x = year, y = mean_corruption, color = Treated)) +
+  geom_pointrange(aes(ymin = lower, ymax = upper), size = 0.5) +
+  geom_line(aes(group = Treated)) + 
+  scale_color_manual(values=c("#A6ACAF", "#17202A")) +
+  theme_bw() +
+  labs(x = "Year", y = "Mean Perception of Corruption") +
+  xlim(c(1994,2021)) 
+```
+
+
+Trends for countries treated in the same year
+```{r}
+table(tj_filtered$firsttreat) #maybe 2005 could be a good year
+
+trends_2005 <- tj_filtered %>%
+  filter(firsttreat == 2005 | firsttreat == 0) #along with non-treated
+
+paralell_trends_2005 <- trends_2005 %>%
+  mutate(Treated = factor(firsttreat, labels = c("Non Treated", "Treated"))) %>%
+  group_by(Treated, year) %>%
+  summarise(mean_corruption = mean(conf_gov_est, na.rm = TRUE),
+            se_corruption = sd(mean_corruption) / sqrt(n()),
+            upper = mean_corruption + (1.96 * mean_corruption),
+            lower = mean_corruption + (-1.96 * mean_corruption))
+
+# Figure 4 on manuscript
+ggplot(paralell_trends_2005, aes(x = year, y = mean_corruption, color = Treated)) +
+  geom_point(aes(y = mean_corruption), size = 0.5) +
+  geom_line(aes(group = Treated)) + 
+  scale_color_manual(values=c("#A6ACAF", "#17202A")) +
+  theme_bw() +
+  labs(x = "Year", y = "Mean Perception of Corruption") +
+  ylim(c(-1,1)) +
+  scale_x_continuous(limits=c(1994,2021), breaks=seq(1994,2021, by = 3)) +
+  geom_vline(xintercept = 2005, linetype = "dotted") +
+  geom_text(aes(x=2004, label="Implementation", y= 0.8), 
+            color = "#A6ACAF", angle=90, vjust = 1.2, size = 3)
+```
+
+
+https://lost-stats.github.io/Model_Estimation/Research_Design/event_study.html
+```{r}
+library(data.table) ## For some minor data wrangling
+library(fixest)     ## NB: Requires version >=0.9.0
+
+tj_filtered[, time_to_treat := ifelse(treated==1, year - `firsttreat`, 0)]
+
+mod_twfe <- feols(conf_gov_est ~ 
+                    i(time_to_treat, treated) + ## Our key interaction: time × treatment status
+                    regime_polity5  |## Other controls
+                    country + year,  ## FEs
+                  cluster = ~country,   ## Clustered SEs
+                  data = tj_filtered)
+
+iplot(mod_twfe, 
+      xlab = 'Time to treatment',
+      main = 'Event study: Staggered treatment (TWFE)')
+```
+```{r}
+# Following Sun and Abraham, we give our never-treated units a fake "treatment"
+# date far outside the relevant study period.
+tj_filtered[, year_treated := ifelse(treated==0, 10000, `firsttreat`)]
+
+# Now we re-run our model from earlier, but this time swapping out 
+# `i(time_to_treat, treat, ref = -1)` for `sunab(year_treated, year)`.
+# See `?sunab`.
+mod_sa <- feols(conf_gov_est ~ sunab(year_treated, year) + ## The only thing that's changed
+                  regime_polity5 |
+                  country + year,
+	       cluster = ~country,
+	       data = tj_filtered)
+```
+
+
+
+
+
+
+
+
+
+
+
+# Panel view
+```{r}
+db_final <- read_excel("db_final.xlsx")
+
+panel_figure <- panelview(inclusion_final ~ treatment_post_dem, data = db_final,
+                       index = c("country", "year"), main = "",
+                       axis.lab.gap = c(2,0), xlab="", ylab="",
+           legend.labs = c("Post-Transition", "Post-TJ", "Pre-Transition")) +
+   theme_minimal() +
+   theme(legend.title = element_blank(),
+         legend.position = c("bottom"),
+         plot.title = element_text(hjust = 0.5))
+panel_figure
+
+
+# Subset db_final to get a figure that fits into beamer
+db_final_subset <- db_final %>%
+  filter(country %in% c("Argentina", "Bolivia", "Burkina Faso", "DR Congo",
+                      "El Salvador", "Ethiopia", "Guinea", "Kenya", "Macedonia",
+                      "Mozambique", "Niger", "Panama", "Romania", "Senegal",
+                      "Tanzania", "Zimbabwe")) 
+
+panel_figure2 <- panelview(inclusion_final ~ treatment_post_dem, data = db_final_subset,
+                       index = c("country", "year"), main = "",
+                       axis.lab.gap = c(2,0), xlab="", ylab="",
+           legend.labs = c("Post-Transition/Conflict", "Post-TJ", "Pre-Transition/Conflict")) +
+   theme_minimal() +
+   theme(legend.title = element_blank(),
+         legend.position = c("bottom"),
+         plot.title = element_text(hjust = 0.5))
+panel_figure2
+```
+
+
+
+
+
+
+
+http://www.princeton.edu/~otorres/DID101R.pdf
+
+https://lost-stats.github.io/Model_Estimation/Research_Design/event_study.html
+
+https://cran.r-project.org/web/packages/did/vignettes/did-basics.html
+
+https://cran.r-project.org/web/packages/staggered/readme/README.html
+
+# Create a dummy variable to indicate the time when the treatment started. Lets
+assume that treatment started in 1994. In this case, years before 1994 will have a
+value of 0 and 1994+ a 1. If you already have this skip this step.
+mydata$time = ifelse(mydata$year >= 1994, 1, 0)
+# Create a dummy variable to identify the group exposed to the treatment. In this
+example lets assumed that countries with code 5,6, and 7 were treated (=1).
+Countries 1-4 were not treated (=0). If you already have this skip this step.
+mydata$treated = ifelse(mydata$country == "E" |
+mydata$country == "F" |
+mydata$country == "G", 1, 0)
+# Create an interaction between time and treated. We will call this interaction
+‘did’.
+mydata$did = mydata$time * mydata$treated

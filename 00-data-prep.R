@@ -1,10 +1,10 @@
 #----------------------------------Data Preparation----------------------------#
 #-Author: Francisca Castro ----------------------------- Created: May 07, 2024-#
-#-R Version: 4.4.0 ------------------------------------- Revised: May 17, 2024-#
+#-R Version: 4.4.0 ------------------------------------- Revised: May 23, 2024-#
 
 # 0) Load Packages
 
-pacman::p_load(magrittr, dplyr, readxl)
+pacman::p_load(magrittr, dplyr, readxl, tidyr)
 
 # 1) Load data
 
@@ -88,10 +88,73 @@ authoritarian_tj %<>%
 civil_wars_tj %<>%
   rename_all(tolower)
 
-# Merge the datasets
-# Merge transitional_countries_filtered with authoritarian_tj
+#- Merge the datasets
+#- Merge transitional_countries_filtered with authoritarian_tj
 tj_countries_authoritarian <- left_join(transitional_countries_filtered, authoritarian_tj, by = c("country_name", "year"))
+names(tj_countries_authoritarian)
 
 # Merge the result with civil_wars_tv
 tj_countries_civil_war <- left_join(transitional_countries_filtered, civil_wars_tj, by = c("country_name", "year"))
- 
+names(tj_countries_civil_war)
+
+tj_countries_full <- tj_countries_authoritarian %>%
+    full_join(tj_countries_civil_war, by = c("country_name", "year", "e_p_polity", "std_dev_polity", "change_in_polity", "democratization", "autocratization")) %>%
+    mutate(
+      transition_year = `transition year`,
+      trial = ifelse(is.na(trial.x) & !is.na(trial.y), trial.y, ifelse(is.na(trial.y), trial.x, pmax(trial.x, trial.y, na.rm = TRUE))),
+      tc = ifelse(is.na(tc.x) & !is.na(tc.y), tc.y, ifelse(is.na(tc.y), tc.x, pmax(tc.x, tc.y, na.rm = TRUE))),
+      amnesty = ifelse(is.na(amnesty.x) & !is.na(amnesty.y), amnesty.y, ifelse(is.na(amnesty.y), amnesty.x, pmax(amnesty.x, amnesty.y, na.rm = TRUE))),
+      reparation = ifelse(is.na(reparation.x) & !is.na(reparation.y), reparation.y, ifelse(is.na(reparation.y), reparation.x, pmax(reparation.x, reparation.y, na.rm = TRUE))),
+      lustration = ifelse(is.na(lustration.x) & !is.na(lustration.y), lustration.y, ifelse(is.na(lustration.y), lustration.x, pmax(lustration.x, lustration.y, na.rm = TRUE)))
+    ) %>%
+    select(country_name, year, e_p_polity, std_dev_polity, change_in_polity, democratization, autocratization, transition_year, trial, tc, amnesty, reparation, lustration) 
+
+
+#- Replace NAs with 0 (no transitional justice mechanisms took place)
+tj_countries_full %<>%
+  mutate(
+    transition_year = replace_na(transition_year, 0),
+    trial = replace_na(trial, 0),
+    tc = replace_na(tc, 0),
+    amnesty = replace_na(amnesty, 0),
+    reparation = replace_na(reparation, 0),
+    lustration = replace_na(lustration, 0))
+  
+names(tj_countries_full)
+
+#- Add PA-X database
+
+pax_data <- read_excel("00-data/raw-data/pax_data.xlsx")
+
+#- Aggregate pax_data to ensure single row per country-year combination
+pax_data_aggregated <- pax_data %>%
+  group_by(country, Year) %>%
+  summarize(
+    amnesty = max(amnesty, na.rm = TRUE),
+    trial = max(trial, na.rm = TRUE),
+    tc = max(tc, na.rm = TRUE),
+    lustration = max(lustration, na.rm = TRUE),
+    reparation = max(reparation, na.rm = TRUE),
+    .groups = 'drop')
+
+pax_data_transformed <- pax_data_aggregated %>%
+  mutate(
+    amnesty = if_else(amnesty > 0, 1, 0),
+    trial = if_else(trial > 0, 1, 0),
+    tc = if_else(tc > 0, 1, 0),
+    lustration = if_else(lustration > 0, 1, 0),
+    reparation = if_else(reparation > 0, 1, 0)
+  ) %>%
+  select(country, year = Year, amnesty, trial, tc, lustration, reparation)
+
+#- Merge with merged_tj_countries
+tj_countries_full %<>%
+  left_join(pax_data_transformed, by = c("country_name" = "country", "year" = "year")) %>%
+  mutate(
+    amnesty = if_else(!is.na(amnesty.y) & (amnesty.x == 0 | is.na(amnesty.x)), 1, coalesce(amnesty.x, amnesty.y)),
+    trial = if_else(!is.na(trial.y) & (trial.x == 0 | is.na(trial.x)), 1, coalesce(trial.x, trial.y)),
+    tc = if_else(!is.na(tc.y) & (tc.x == 0 | is.na(tc.x)), 1, coalesce(tc.x, tc.y)),
+    lustration = if_else(!is.na(lustration.y) & (lustration.x == 0 | is.na(lustration.x)), 1, coalesce(lustration.x, lustration.y)),
+    reparation = if_else(!is.na(reparation.y) & (reparation.x == 0 | is.na(reparation.x)), 1, coalesce(reparation.x, reparation.y))
+  ) %>%
+  select(country_name, year, e_p_polity, std_dev_polity, change_in_polity, democratization, autocratization, transition_year, trial, tc, amnesty, reparation, lustration)

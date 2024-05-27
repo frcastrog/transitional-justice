@@ -1,10 +1,10 @@
 #--------------------------------Public Opinion Data---------------------------#
 #-Author: Francisca Castro ----------------------------- Created: May 07, 2024-#
-#-R Version: 4.4.0 ------------------------------------- Revised: May 23, 2024-#
+#-R Version: 4.4.0 ------------------------------------- Revised: May 27, 2024-#
 
 # Load Packages
 
-pacman::p_load(haven, lubridate, purrr, readr, magrittr, dplyr)
+pacman::p_load(haven, lubridate, purrr, readr, magrittr, dplyr, haven, countrycode)
 
 # Afrobarometer
 
@@ -277,44 +277,90 @@ afrobarometer_r7 %<>%
 afrobarometer_r1 %<>%
   mutate(
     corr_overall = ifelse(pfpcr2 %in% 1:4, pfpcr2, NA),
-    corr_retro = ifelse(pfpcr5 %in% 1:4, pfpcr5, NA))
+    corr_retro = ifelse(pfpcr5 %in% 1:4, pfpcr5, NA)) %>%
+  mutate(
+    corr_overall = ifelse(!is.na(corr_overall), 5 - corr_overall, NA),
+    corr_retro = ifelse(!is.na(corr_retro), 5 - corr_retro, NA))
 
 afrobarometer_r2 %<>%
   mutate(
     corr_pres = ifelse(q51a %in% 0:3, q51a, NA),
     corr_gov = ifelse(q51c %in% 0:3, q51c, NA),
-    corr_judges = ifelse(q51f %in% 0:3, q51f, NA))
+    corr_judges = ifelse(q51f %in% 0:3, q51f, NA)
+  ) %>%
+  mutate(
+    corr_pres = ifelse(!is.na(corr_pres), corr_pres + 1, NA),
+    corr_gov = ifelse(!is.na(corr_gov), corr_gov + 1, NA),
+    corr_judges = ifelse(!is.na(corr_judges), corr_judges + 1, NA)
+  )
+
 
 afrobarometer_r3 %<>%
   mutate(
     corr_pres = ifelse(q56a %in% 0:3, q56a, NA),
     corr_gov = ifelse(q56d %in% 0:3, q56d, NA),
-    corr_judges = ifelse(q56h %in% 0:3, q56h, NA))
+    corr_judges = ifelse(q56h %in% 0:3, q56h, NA)
+  ) %>%
+  mutate(
+    corr_pres = ifelse(!is.na(corr_pres), corr_pres + 1, NA),
+    corr_gov = ifelse(!is.na(corr_gov), corr_gov + 1, NA),
+    corr_judges = ifelse(!is.na(corr_judges), corr_judges + 1, NA)
+  )
+
 
 afrobarometer_r4 %<>%
   mutate(
     corr_pres = ifelse(Q50A %in% 0:3, Q50A, NA),
     corr_gov = ifelse(Q50D %in% 0:3, Q50D, NA),
-    corr_judges = ifelse(Q50G %in% 0:3, Q50G, NA))
+    corr_judges = ifelse(Q50G %in% 0:3, Q50G, NA)
+  ) %>%
+  mutate(
+    corr_pres = ifelse(!is.na(corr_pres), corr_pres + 1, NA),
+    corr_gov = ifelse(!is.na(corr_gov), corr_gov + 1, NA),
+    corr_judges = ifelse(!is.na(corr_judges), corr_judges + 1, NA)
+  )
+
 
 afrobarometer_r5 %<>%
   mutate(
     corr_pres = ifelse(Q60A %in% 0:3, Q60A, NA),
     corr_gov = ifelse(Q60C %in% 0:3, Q60C, NA),
-    corr_judges = ifelse(Q60G %in% 0:3, Q60G, NA))
+    corr_judges = ifelse(Q60G %in% 0:3, Q60G, NA)
+  ) %>%
+  mutate(
+    corr_pres = ifelse(!is.na(corr_pres), corr_pres + 1, NA),
+    corr_gov = ifelse(!is.na(corr_gov), corr_gov + 1, NA),
+    corr_judges = ifelse(!is.na(corr_judges), corr_judges + 1, NA)
+  )
+
 
 afrobarometer_r6 %<>%
   mutate(
     corr_pres = ifelse(Q53A %in% 0:3, Q53A, NA),
     corr_gov = ifelse(Q53C %in% 0:3, Q53C, NA),
     corr_judges = ifelse(Q53G %in% 0:3, Q53G, NA),
-    corr_level = ifelse(Q54 %in% 1:5, Q54, NA))  # Level of corruption (1 increased - 5 decreased)
+    corr_level = ifelse(Q54 %in% 1:5, Q54, NA)
+  ) %>%
+  mutate(
+    corr_pres = ifelse(!is.na(corr_pres), corr_pres + 1, NA),
+    corr_gov = ifelse(!is.na(corr_gov), corr_gov + 1, NA),
+    corr_judges = ifelse(!is.na(corr_judges), corr_judges + 1, NA),
+    corr_level = ifelse(!is.na(corr_level), 6 - corr_level, NA)
+  )
+
 
 afrobarometer_r7 %<>%
   mutate(
     corr_pres = ifelse(Q44A %in% 0:3, Q44A, NA),
     corr_gov = ifelse(Q44C %in% 0:3, Q44C, NA),
-    corr_judges = ifelse(Q44F %in% 0:3, Q44F, NA))
+    corr_judges = ifelse(Q44F %in% 0:3, Q44F, NA)
+  ) %>%
+  mutate(
+    corr_pres = ifelse(!is.na(corr_pres), corr_pres + 1, NA),
+    corr_gov = ifelse(!is.na(corr_gov), corr_gov + 1, NA),
+    corr_judges = ifelse(!is.na(corr_judges), corr_judges + 1, NA)
+  )
+
 
 ## Trust in government
 
@@ -332,27 +378,56 @@ afrobarometer_r1 %<>%
 
 afrobarometer_r2 %<>%
   mutate(
-    trust_rul_part = ifelse(q43f %in% 0:3, q43f, NA))
+    trust_rul_part = ifelse(q43f %in% 0:3, q43f, NA)
+  ) %>%
+  mutate(
+    trust_rul_part = ifelse(!is.na(trust_rul_part), trust_rul_part + 1, NA)
+  )
 
 afrobarometer_r3 %<>%
   mutate(
-    trust_rul_part = ifelse(q55e %in% 0:3, q55e, NA))
+    trust_rul_part = ifelse(q55e %in% 0:3, q55e, NA)
+  ) %>%
+  mutate(
+    trust_rul_part = ifelse(!is.na(trust_rul_part), trust_rul_part + 1, NA)
+  )
+
 
 afrobarometer_r4 %<>%
   mutate(
-    trust_rul_part = ifelse(Q49E %in% 0:3, Q49E, NA))
+    trust_rul_part = ifelse(Q49E %in% 0:3, Q49E, NA)
+  ) %>%
+  mutate(
+    trust_rul_part = ifelse(!is.na(trust_rul_part), trust_rul_part + 1, NA)
+  )
+
 
 afrobarometer_r5 %<>%
   mutate(
-    trust_rul_part = ifelse(Q59F %in% 0:3, Q59F, NA))
+    trust_rul_part = ifelse(Q59F %in% 0:3, Q59F, NA)
+  ) %>%
+  mutate(
+    trust_rul_part = ifelse(!is.na(trust_rul_part), trust_rul_part + 1, NA)
+  )
+
 
 afrobarometer_r6 %<>%
   mutate(
-    trust_rul_part = ifelse(Q52F %in% 0:3, Q52F, NA))
+    trust_rul_part = ifelse(Q52F %in% 0:3, Q52F, NA)
+  ) %>%
+  mutate(
+    trust_rul_part = ifelse(!is.na(trust_rul_part), trust_rul_part + 1, NA)
+  )
+
 
 afrobarometer_r7 %<>%
   mutate(
-    trust_rul_part = ifelse(Q43E %in% 0:3, Q43E, NA))
+    trust_rul_part = ifelse(Q43E %in% 0:3, Q43E, NA)
+  ) %>%
+  mutate(
+    trust_rul_part = ifelse(!is.na(trust_rul_part), trust_rul_part + 1, NA)
+  )
+
 
 ## Satisfaction with democracy
 
@@ -445,6 +520,9 @@ arab_barometer_w6_3 <- read_csv("00-data/surveys/arab-barometer/wave6_part3.csv"
 # Combine all parts into one data frame
 arab_barometer_w6 <- bind_rows(arab_barometer_w6_1, arab_barometer_w6_2, arab_barometer_w6_3)
 
+rm(arab_barometer_w6_1)
+rm(arab_barometer_w6_2)
+rm(arab_barometer_w6_3)
 
 #- Include country and year
 
@@ -590,8 +668,7 @@ arab_barometer_w1 %<>%
     q253 == "not a lot of officials are corrupt" ~ 2,
     q253 == "most officials are corrupt" ~ 3,
     q253 == "almost everyone is corrupt" ~ 4,
-    TRUE ~ NA_real_  # Set all other responses to NA
-  ))
+    TRUE ~ NA_real_))
 
 arab_barometer_w5 %<>%
   mutate(corr_wide = case_when(
@@ -599,8 +676,7 @@ arab_barometer_w5 %<>%
     Q211A == 2 ~ 2,
     Q211A == 3 ~ 3,
     Q211A == 4 ~ 4,
-    TRUE ~ NA_real_  # Set 98, 99, and other invalid responses to NA
-  ))
+    TRUE ~ NA_real_ ))
 
 # Extent corruption (corr_ext)
 ## w4: q210 (1 not at all - 4 to a large extent)
@@ -619,20 +695,18 @@ arab_barometer_w4 %<>%
     TRUE ~ NA_real_ ))
 
 arab_barometer_w5 %<>%
-  mutate(corr_ext = case_when(
-    Q210 == 1 ~ 1,
-    Q210 == 2 ~ 2,
-    Q210 == 3 ~ 3,
-    Q210 == 4 ~ 4,
-    TRUE ~ NA_real_))
+  mutate(
+    corr_ext = ifelse(Q210 %in% 1:4, Q210, NA)) %>%
+  mutate(
+    corr_ext = ifelse(!is.na(corr_ext), 5 - corr_ext, NA))
+
 
 arab_barometer_w6 %<>%
-  mutate(corr_ext = case_when(
-    Q210 == 1 ~ 1,
-    Q210 == 2 ~ 2,
-    Q210 == 3 ~ 3,
-    Q210 == 4 ~ 4,
-    TRUE ~ NA_real_))
+  mutate(
+    corr_ext = ifelse(Q210 %in% 1:4, Q210, NA)) %>%
+  mutate(
+    corr_ext = ifelse(!is.na(corr_ext), 5 - corr_ext, NA))
+
 
 # Trust
 
@@ -652,91 +726,85 @@ table(arab_barometer_w6$Q201A_1)
 
 arab_barometer_w1 %<>%
   mutate(trust_govt = case_when(
-    q2011 == "a great deal of trust" ~ 1,
-    q2011 == "quite a lot of trust" ~ 2,
-    q2011 == "not very much trust" ~ 3,
-    q2011 == "none at all" ~ 4,
+    q2011 == "a great deal of trust" ~ 4,
+    q2011 == "quite a lot of trust" ~ 3,
+    q2011 == "not very much trust" ~ 2,
+    q2011 == "none at all" ~ 1,
     TRUE ~ NA_real_))
 
 arab_barometer_w2 %<>%
   mutate(trust_govt = case_when(
-    q2011 == "1. i trust it to a great extent" ~ 1,
-    q2011 == "2. i trust it to a medium extent" ~ 2,
-    q2011 == "3. i trust it to a limited extent" ~ 3,
-    q2011 == "4. i absolutely do not trust it" ~ 4,
+    q2011 == "1. i trust it to a great extent" ~ 4,
+    q2011 == "2. i trust it to a medium extent" ~ 3,
+    q2011 == "3. i trust it to a limited extent" ~ 2,
+    q2011 == "4. i absolutely do not trust it" ~ 1,
     TRUE ~ NA_real_))
 
 arab_barometer_w3 %<>%
   mutate(trust_govt = case_when(
-    q2011 == "I trust it to a great extent" ~ 1,
-    q2011 == "I trust it to a medium extent" ~ 2,
-    q2011 == "I trust it to a limited extent" ~ 3,
-    q2011 == "I absolutely do not trust it" ~ 4,
+    q2011 == "I trust it to a great extent" ~ 4,
+    q2011 == "I trust it to a medium extent" ~ 3,
+    q2011 == "I trust it to a limited extent" ~ 2,
+    q2011 == "I absolutely do not trust it" ~ 1,
     TRUE ~ NA_real_ ))
 
 arab_barometer_w4 %<>%
   mutate(trust_govt = case_when(
-    q2011 == "A great deal of trust" ~ 1,
-    q2011 == "Quite a lot of trust" ~ 2,
-    q2011 == "Not very much trust" ~ 3,
-    q2011 == "No trust at all" ~ 4,
+    q2011 == "A great deal of trust" ~ 4,
+    q2011 == "Quite a lot of trust" ~ 3,
+    q2011 == "Not very much trust" ~ 2,
+    q2011 == "No trust at all" ~ 1,
     TRUE ~ NA_real_ ))
 
 arab_barometer_w5 %<>%
-  mutate(trust_govt = case_when(
-    Q201A_1 == 1 ~ 1,
-    Q201A_1 == 2 ~ 2,
-    Q201A_1 == 3 ~ 3,
-    Q201A_1 == 4 ~ 4,
-    TRUE ~ NA_real_ ))
+  mutate(
+    trust_govt = ifelse(Q201A_1 %in% 1:4, Q201A_1, NA)) %>%
+  mutate(
+    trust_govt = ifelse(!is.na(trust_govt), 5 - trust_govt, NA))
 
 arab_barometer_w6 %<>%
-  mutate(trust_govt = case_when(
-    Q201A_1 == 1 ~ 1,
-    Q201A_1 == 2 ~ 2,
-    Q201A_1 == 3 ~ 3,
-    Q201A_1 == 4 ~ 4,
-    TRUE ~ NA_real_))
+  mutate(
+    trust_govt = ifelse(Q201A_1 %in% 1:4, Q201A_1, NA)) %>%
+  mutate(
+    trust_govt = ifelse(!is.na(trust_govt), 5 - trust_govt, NA))
 
 arab_barometer_w1 %<>%
   mutate(trust_jud = case_when(
-    q2012 == "a great deal of trust" ~ 1,
-    q2012 == "quite a lot of trust" ~ 2,
-    q2012 == "not very much trust" ~ 3,
-    q2012 == "none at all" ~ 4,
+    q2012 == "a great deal of trust" ~ 4,
+    q2012 == "quite a lot of trust" ~ 3,
+    q2012 == "not very much trust" ~ 2,
+    q2012 == "none at all" ~ 1,
     TRUE ~ NA_real_))
 
 arab_barometer_w2 %<>%
   mutate(trust_jud = case_when(
-    q2012 == "1. i trust it to a great extent" ~ 1,
-    q2012 == "2. i trust it to a medium extent" ~ 2,
-    q2012 == "3. i trust it to a limited extent" ~ 3,
-    q2012 == "4. i absolutely do not trust it" ~ 4,
+    q2012 == "1. i trust it to a great extent" ~ 4,
+    q2012 == "2. i trust it to a medium extent" ~ 3,
+    q2012 == "3. i trust it to a limited extent" ~ 2,
+    q2012 == "4. i absolutely do not trust it" ~ 1,
     TRUE ~ NA_real_))
 
 arab_barometer_w4 %<>%
   mutate(trust_jud = case_when(
-    q2012 == "A great deal of trust" ~ 1,
-    q2012 == "Quite a lot of trust" ~ 2,
-    q2012 == "Not very much trust" ~ 3,
-    q2012 == "No trust at all" ~ 4,
+    q2012 == "A great deal of trust" ~ 4,
+    q2012 == "Quite a lot of trust" ~ 3,
+    q2012 == "Not very much trust" ~ 2,
+    q2012 == "No trust at all" ~ 1,
     TRUE ~ NA_real_ ))
 
 arab_barometer_w5 %<>%
-  mutate(trust_jud = case_when(
-    Q201A_2 == 1 ~ 1,
-    Q201A_2 == 2 ~ 2,
-    Q201A_2 == 3 ~ 3,
-    Q201A_2 == 4 ~ 4,
-    TRUE ~ NA_real_ ))
+  mutate(
+    trust_jud = ifelse(Q201A_2 %in% 1:4, Q201A_2, NA)) %>%
+  mutate(
+    trust_jud = ifelse(!is.na(trust_jud), 5 - trust_jud, NA))
+
 
 arab_barometer_w6 %<>%
-  mutate(trust_jud = case_when(
-    Q201A_2 == 1 ~ 1,
-    Q201A_2 == 2 ~ 2,
-    Q201A_2 == 3 ~ 3,
-    Q201A_2 == 4 ~ 4,
-    TRUE ~ NA_real_ ))
+  mutate(
+    trust_jud = ifelse(Q201A_2 %in% 1:4, Q201A_2, NA)) %>%
+  mutate(
+    trust_jud = ifelse(!is.na(trust_jud), 5 - trust_jud, NA))
+
 
 # Satisfaction government (sat_govt)
 ## w1: q244 (1 very unsatisfied - 10 very satisfied)
@@ -748,7 +816,7 @@ arab_barometer_w6 %<>%
 
 table(arab_barometer_w1$q244)
 table(arab_barometer_w2$q513)
-table(arab_barometer_w3$q211)
+table(arab_barometer_w3$q513)
 table(arab_barometer_w4$q513)
 table(arab_barometer_w5$Q513)
 table(arab_barometer_w6$Q204A_3)
@@ -785,10 +853,17 @@ arab_barometer_w2 %<>%
 
 arab_barometer_w3 %<>%
   mutate(sat_govt = case_when(
-    q211 == "Not at all" ~ 1,
-    q211 == "To a limited extent" ~ 3,
-    q211 == "To a medium extent" ~ 5,
-    q211 == "To a great extent" ~ 10,
+    q513 == "Completely unsatisfied" ~ 1,
+    q513 == "1" ~ 2,
+    q513 == "2" ~ 3,
+    q513 == "3" ~ 4,
+    q513 == "4" ~ 5,
+    q513 == "5" ~ 6,
+    q513 == "6" ~ 7,
+    q513 == "7" ~ 8,
+    q513 == "8" ~ 9,
+    q513 == "9" ~ 10,
+    q513 == "Completely satisfied" ~ 10,
     TRUE ~ NA_real_
   ))
 
@@ -810,27 +885,26 @@ arab_barometer_w4 %<>%
 
 arab_barometer_w5 %<>%
   mutate(sat_govt = case_when(
-    Q513 == 1 ~ 1,
-    Q513 == 2 ~ 2,
-    Q513 == 3 ~ 3,
-    Q513 == 4 ~ 4,
-    Q513 == 5 ~ 5,
-    Q513 == 6 ~ 6,
-    Q513 == 7 ~ 7,
-    Q513 == 8 ~ 8,
-    Q513 == 9 ~ 9,
+    Q513 == 0 ~ 1,
+    Q513 == 1 ~ 2,
+    Q513 == 2 ~ 3,
+    Q513 == 3 ~ 4,
+    Q513 == 4 ~ 5,
+    Q513 == 5 ~ 6,
+    Q513 == 6 ~ 7,
+    Q513 == 7 ~ 8,
+    Q513 == 8 ~ 9,
+    Q513 == 9 ~ 10,
     Q513 == 10 ~ 10,
     TRUE ~ NA_real_
   ))
 
 arab_barometer_w6 %<>%
-  mutate(sat_govt = case_when(
-    Q204A_3 == 1 ~ 1,
-    Q204A_3 == 2 ~ 2,
-    Q204A_3 == 3 ~ 3,
-    Q204A_3 == 4 ~ 4,
-    TRUE ~ NA_real_
-  ))
+  mutate(
+    sat_govt = ifelse(Q204A_3 %in% 1:4, Q204A_3, NA)) %>%
+  mutate(
+    sat_govt = ifelse(!is.na(sat_govt), 5 - sat_govt, NA))
+
 
 #- Put everything in the same dataset
 
@@ -910,10 +984,8 @@ asiabarometer_w2 %<>%
                           "10" = "Singapore",
                           "11" = "Vietnam",
                           "12" = "Malaysia",
-                          "13" = "Cambodia"
-    ),
-    year = ir9_3
-  )
+                          "13" = "Cambodia"),
+    year = ir9_3)
 
 
 asiabarometer_w3 %<>%
@@ -932,10 +1004,8 @@ asiabarometer_w3 %<>%
                           "10" = "Singapore",
                           "11" = "Vietnam",
                           "12" = "Cambodia",
-                          "13" = "Malaysia"
-    ),
-    year = format(as.Date(ir9, format="%Y-%m-%d"), "%Y")
-  )
+                          "13" = "Malaysia"),
+    year = format(as.Date(ir9, format="%Y-%m-%d"), "%Y"))
 
 asiabarometer_w4 %<>%
   mutate(
@@ -954,9 +1024,7 @@ asiabarometer_w4 %<>%
                           "11" = "Vietnam",
                           "12" = "Cambodia",
                           "13" = "Malaysia",
-                          "14" = "Myanmar"
-    )
-  )
+                          "14" = "Myanmar"))
 
 asiabarometer_w5 %<>%
   mutate(
@@ -977,10 +1045,8 @@ asiabarometer_w5 %<>%
                           "13" = "Malaysia",
                           "14" = "Myanmar",
                           "15" = "Australia",
-                          "18" = "India"
-    ),
-    year = Year
-  )
+                          "18" = "India"),
+    year = Year)
 
 #- Relevant variables
 
@@ -994,7 +1060,6 @@ asiabarometer_w1 %<>%
     TRUE ~ NA_real_ ))
 
 ## w2: q118 (1 almost everyone is  corrupt - 4 hardly anyone is involved)
-
 
 asiabarometer_w2 %<>%
   mutate(
@@ -1029,57 +1094,55 @@ asiabarometer_w5 %<>%
     TRUE ~ NA_real_))
 
 
-# Trust (trust_gov and trust_jud)
+# Trust (trust_govt and trust_jud)
 ## w1 q7 the courts (1 great deal of trust - 4 not at all), q8 the national government.
 
 asiabarometer_w1 %<>%
   mutate(
-    trust_jud = case_when(
-      q007 %in% 1:4 ~ q007,
-      TRUE ~ NA_real_),
-    trust_gov = case_when(
-      q008 %in% 1:4 ~ q008,
-      TRUE ~ NA_real_))
+    trust_jud = ifelse(q007 %in% 1:4, q007, NA),
+    trust_govt = ifelse(q008 %in% 1:4, q008, NA)) %>%
+  mutate(
+    trust_jud = ifelse(!is.na(trust_jud), 5 - trust_jud, NA),
+    trust_govt = ifelse(!is.na(trust_govt), 5 - trust_govt, NA))
+
 
 ## w2 q7 the presidency or prime minister (1 none at all - 4 a great deal of trust), q8 the courts
 asiabarometer_w2 %<>%
   mutate(
-    q7_clean = ifelse(q7 %in% 1:4, q7, NA),
-    q8_clean = ifelse(q8 %in% 1:4, q8, NA),
-    trust_gov = ifelse(!is.na(q7_clean), 5 - q7_clean, NA), # reverse the scale
-    trust_jud = ifelse(!is.na(q8_clean), 5 - q8_clean, NA) # reverse the scale
-  ) %>%
-  select(-q7_clean, -q8_clean)
+    trust_govt = ifelse(q7 %in% 1:4, q7, NA),
+    trust_jud = ifelse(q8 %in% 1:4, q8, NA))
 
 ## w3: q7 the president (1 a great deal - 4 none at all), q8 the courts
 
 asiabarometer_w3 %<>%
   mutate(
-    trust_gov = case_when(
-      q7 %in% 1:4 ~ q7,
-      TRUE ~ NA_real_),
-    trust_jud = case_when(
-      q8 %in% 1:4 ~ q8,
-      TRUE ~ NA_real_))
+    trust_govt = ifelse(q7 %in% 1:4, q7, NA),
+    trust_jud = ifelse(q8 %in% 1:4, q8, NA)) %>%
+  mutate(
+    trust_govt = ifelse(!is.na(trust_govt), 5 - trust_govt, NA),
+    trust_jud = ifelse(!is.na(trust_jud), 5 - trust_jud, NA))
+
 
 ## w4: q7 the president (1 a great deal - 4 none at all), q8 the courts
 
 asiabarometer_w4 %<>%
   mutate(
-    trust_gov = case_when(
-      q7 %in% 1:4 ~ q7,
-      TRUE ~ NA_real_),
-    trust_jud = case_when(
-      q8 %in% 1:4 ~ q8,
-      TRUE ~ NA_real_))
+    trust_govt = ifelse(q7 %in% 1:4, q7, NA),
+    trust_jud = ifelse(q8 %in% 1:4, q8, NA)) %>%
+  mutate(
+    trust_govt = ifelse(!is.na(trust_govt), 5 - trust_govt, NA),
+    trust_jud = ifelse(!is.na(trust_jud), 5 - trust_jud, NA))
+
 
 ## w5: q7 (1 fully trust - 6 fully distrust), q8 courts
 
 asiabarometer_w5 %<>%
   mutate(
     q7_clean = ifelse(q7 %in% 1:6, q7, NA),
-    q8_clean = ifelse(q8 %in% 1:6, q8, NA),
-    trust_gov = case_when(
+    q8_clean = ifelse(q8 %in% 1:6, q8, NA)
+  ) %>%
+  mutate(
+    trust_govt = case_when(
       !is.na(q7_clean) ~ case_when(
         q7_clean == 1 ~ 4,
         q7_clean == 2 ~ 3,
@@ -1107,47 +1170,48 @@ asiabarometer_w5 %<>%
   select(-q7_clean, -q8_clean)
 
 
+
 # Satisfaction with democracy (sat_dem)
 ## w1: q98 (1 very satisfied - 4 not at all satisfied)
 
 asiabarometer_w1 %<>%
-  mutate(sat_dem = case_when(
-    q098 %in% 1:4 ~ q098,
-    TRUE ~ NA_real_
-  ))
+  mutate(
+    sat_dem = ifelse(q098 %in% 1:4, q098, NA)) %>%
+  mutate(
+    sat_dem = ifelse(!is.na(sat_dem), 5 - sat_dem, NA))
+
 
 ## w2: q93 (1 not at all satisfied - 4 very satisfied)
 
 asiabarometer_w2 %<>%
-  mutate(sat_dem = case_when(
-    q93 %in% 1:4 ~ 5 - q93,
-    TRUE ~ NA_real_
-  ))
-
+  mutate(
+    sat_dem = ifelse(q93 %in% 1:4, q93, NA))
 
 ## w3: q89 (1 very satisfied - 4 not at all satisfied)
 
 asiabarometer_w3 %<>%
-  mutate(sat_dem = case_when(
-    q89 %in% 1:4 ~ q89,
-    TRUE ~ NA_real_
-  ))
+  mutate(
+    sat_dem = ifelse(q89 %in% 1:4, q89, NA)) %>%
+  mutate(
+    sat_dem = ifelse(!is.na(sat_dem), 5 - sat_dem, NA))
 
 ## w4: q98 (1 very satisfied - 4 not at all satisfied)
 
 asiabarometer_w4 %<>%
-  mutate(sat_dem = case_when(
-    q98 %in% 1:4 ~ q98,
-    TRUE ~ NA_real_
-  ))
+  mutate(
+    sat_dem = ifelse(q98 %in% 1:4, q98, NA)) %>%
+  mutate(
+    sat_dem = ifelse(!is.na(sat_dem), 5 - sat_dem, NA))
+
 
 ## w5: q99 (1 very satisfied - 4 not at all satisfied)
 
 asiabarometer_w5 %<>%
-  mutate(sat_dem = case_when(
-    q99 %in% 1:4 ~ q99,
-    TRUE ~ NA_real_
-  ))
+  mutate(
+    sat_dem = ifelse(q99 %in% 1:4, q99, NA)) %>%
+  mutate(
+    sat_dem = ifelse(!is.na(sat_dem), 5 - sat_dem, NA))
+
 
 #- Put everything in the same dataset
 
@@ -1155,51 +1219,51 @@ asiabarometer_w1 %<>%
   mutate(year = as.numeric(year)) %>%
   mutate(
     corr_wide = as.numeric(corr_wide),
-    trust_gov = as.numeric(trust_gov),
+    trust_govt = as.numeric(trust_govt),
     trust_jud = as.numeric(trust_jud),
     sat_dem = as.numeric(sat_dem)
   ) %>%
-  select(country_name, year, corr_wide, trust_gov, trust_jud, sat_dem)
+  select(country_name, year, corr_wide, trust_govt, trust_jud, sat_dem)
 
 asiabarometer_w2 %<>%
   mutate(year = as.numeric(year)) %>%
   mutate(
     corr_wide = as.numeric(corr_wide),
-    trust_gov = as.numeric(trust_gov),
+    trust_govt = as.numeric(trust_govt),
     trust_jud = as.numeric(trust_jud),
     sat_dem = as.numeric(sat_dem)
   ) %>%
-  select(country_name, year, corr_wide, trust_gov, trust_jud, sat_dem)
+  select(country_name, year, corr_wide, trust_govt, trust_jud, sat_dem)
 
 asiabarometer_w3 %<>%
   mutate(year = as.numeric(year)) %>%
   mutate(
     corr_wide = as.numeric(corr_wide),
-    trust_gov = as.numeric(trust_gov),
+    trust_govt = as.numeric(trust_govt),
     trust_jud = as.numeric(trust_jud),
     sat_dem = as.numeric(sat_dem)
   ) %>%
-  select(country_name, year, corr_wide, trust_gov, trust_jud, sat_dem)
+  select(country_name, year, corr_wide, trust_govt, trust_jud, sat_dem)
 
 asiabarometer_w4 %<>%
   mutate(year = as.numeric(year)) %>%
   mutate(
     corr_wide = as.numeric(corr_wide),
-    trust_gov = as.numeric(trust_gov),
+    trust_govt = as.numeric(trust_govt),
     trust_jud = as.numeric(trust_jud),
     sat_dem = as.numeric(sat_dem)
   ) %>%
-  select(country_name, year, corr_wide, trust_gov, trust_jud, sat_dem)
+  select(country_name, year, corr_wide, trust_govt, trust_jud, sat_dem)
 
 asiabarometer_w5 %<>%
   mutate(year = as.numeric(year)) %>%
   mutate(
     corr_wide = as.numeric(corr_wide),
-    trust_gov = as.numeric(trust_gov),
+    trust_govt = as.numeric(trust_govt),
     trust_jud = as.numeric(trust_jud),
     sat_dem = as.numeric(sat_dem)
   ) %>%
-  select(country_name, year, corr_wide, trust_gov, trust_jud, sat_dem)
+  select(country_name, year, corr_wide, trust_govt, trust_jud, sat_dem)
 
 asiabarometer_all <- bind_rows(
   asiabarometer_w1,
@@ -1207,3 +1271,195 @@ asiabarometer_all <- bind_rows(
   asiabarometer_w3,
   asiabarometer_w4,
   asiabarometer_w5)
+
+# LAPOP
+
+lapop <- read_dta("00-data/surveys/lapop/lapop.dta")
+
+
+#- Recode countries
+
+lapop %<>%
+  mutate(
+    pais = as.character(pais),
+    country_name = recode(pais,
+                          "1" = "Mexico",
+                          "2" = "Guatemala",
+                          "3" = "El Salvador",
+                          "4" = "Honduras",
+                          "5" = "Nicaragua",
+                          "6" = "Costa Rica",
+                          "7" = "Panama",
+                          "8" = "Colombia",
+                          "9" = "Ecuador",
+                          "10" = "Bolivia",
+                          "11" = "Peru",
+                          "12" = "Paraguay",
+                          "13" = "Chile",
+                          "14" = "Uruguay",
+                          "15" = "Brazil",
+                          "16" = "Venezuela",
+                          "17" = "Argentina",
+                          "21" = "Dominican Republic",
+                          "22" = "Haiti",
+                          "23" = "Jamaica",
+                          "24" = "Guyana",
+                          "25" = "Trinidad and Tobago",
+                          "26" = "Belize",
+                          "27" = "Surinam",
+                          "28" = "Bahamas",
+                          "29" = "Barbados",
+                          "40" = "USA",
+                          "41" = "Canada"
+    )
+  )
+
+#- Relevant variables
+
+# Trust
+## b14 trust in government trust_gov (1 nada - 7 mucho), b10a trust_jud 
+
+# Extent corruption (corr_ext)
+## exc7new (1 none - 5 all)
+
+# satisfaction with democracy (sat_dem)
+## pn4 (1 muy satisfecho - 4 muy insatisfecho)
+
+lapop %<>%
+  mutate(
+    trust_govt = ifelse(b14 %in% 1:7, b14, NA),
+    trust_jud = ifelse(b10a %in% 1:7, b10a, NA),
+    corr_ext = ifelse(exc7new %in% 1:5, exc7new, NA),
+    sat_dem = ifelse(pn4 %in% 1:4, pn4, NA)) %>%
+  mutate(
+    sat_dem = ifelse(!is.na(sat_dem), 5 - sat_dem, NA)) %>% # reverse satisfaction with democracy
+  select(country_name, year, trust_govt, trust_jud, corr_ext, sat_dem)
+
+
+# WVS 
+
+load("00-data/surveys/wvs/wvs_ts.rdata")
+
+wvs_full <- WVS_TimeSeries_1981_2022_spss_v3_0
+rm(WVS_TimeSeries_1981_2022_spss_v3_0)
+
+
+#- Create country
+
+wvs_full$country_name <- countrycode(wvs_full$COUNTRY_ALPHA, origin = "iso3c",
+                                destination = "country.name", warn = TRUE)
+
+wvs_full$year <- wvs_full$S020
+
+#- Specific variables
+
+# Extent of political corruption (corr_extent)
+## E196 (1  Almost no public officials engaged in it - 4  Almost all public officials are engaged in it)
+
+# Scale of corruption (corr_scale)
+## E268 (1 There is no corruption in [my country] - 10  There is abundant corruption in [my country])
+
+# Trust government (trust_gov)
+## E069_11 (1  A great deal - 4  None at all)
+
+# Trust judicial system (trust_jud)
+## E069_17 (1  A great deal - 4  None at all)
+
+# Satisfaction with democracy
+## E110 (1  Very satisfied - 4  Not at all satisfied)
+
+wvs_full %<>%
+  mutate(
+    corr_extent = ifelse(E196 %in% 1:4, E196, NA),
+    corr_scale = ifelse(E268 %in% 1:10, E268, NA),
+    trust_gov_clean = ifelse(E069_11 %in% 1:4, E069_11, NA),
+    trust_jud_clean = ifelse(E069_17 %in% 1:4, E069_17, NA),
+    sat_dem_clean = ifelse(E110 %in% 1:4, E110, NA),
+    trust_govt = ifelse(!is.na(trust_gov_clean), 5 - trust_gov_clean, NA),
+    trust_jud = ifelse(!is.na(trust_jud_clean), 5 - trust_jud_clean, NA),
+    sat_dem = ifelse(!is.na(sat_dem_clean), 5 - sat_dem_clean, NA)
+  ) %>%
+  select(country_name, year, corr_extent, corr_scale, trust_govt, trust_jud, sat_dem)
+
+# Select only relevant countries
+
+# databases: `afrobarometer_all`, `arab_barometer_all`, `asiabarometer_all`,
+# `lapop`, `wvs_full`
+
+# countries from `tj_countries_full`
+
+names(tj_countries_full)
+
+#- Add country codes
+
+tj_countries_full %<>%
+  mutate(country_cod = countrycode(country_name, 'country.name', 'iso3c')) %>%
+  select(country_name, country_cod, everything())
+
+tj_countries_full %>% filter(is.na(country_cod)) #no NAs
+
+# Afrobarometer
+afrobarometer_all %<>%
+  mutate(country_cod = countrycode(country_name, 'country.name', 'iso3c')) %>%
+  select(country_name, country_cod, everything())
+
+# Check for NAs in country_cod
+afrobarometer_all %>% filter(is.na(country_cod))
+
+
+# Arab Barometer
+arab_barometer_all %<>%
+  mutate(country_cod = countrycode(country_name, 'country.name', 'iso3c')) %>%
+  select(country_name, country_cod, everything())
+
+# Check for NAs in country_cod
+arab_barometer_all %>% filter(is.na(country_cod))
+
+# Asia Barometer
+asiabarometer_all %<>%
+  mutate(country_cod = countrycode(country_name, 'country.name', 'iso3c')) %>%
+  select(country_name, country_cod, everything())
+
+# Check for NAs in country_cod
+asiabarometer_all %>% filter(is.na(country_cod))
+
+# LAPOP
+lapop %<>%
+  mutate(country_cod = countrycode(country_name, 'country.name', 'iso3c')) %>%
+  select(country_name, country_cod, everything())
+
+# Check for NAs in country_cod
+lapop %>% filter(is.na(country_cod))
+
+# WVS
+wvs_full %<>%
+  mutate(country_cod = countrycode(country_name, 'country.name', 'iso3c')) %>%
+  select(country_name, country_cod, everything())
+
+# Check for NAs in country_cod
+wvs_full %>% filter(is.na(country_cod))
+
+#- Filter only the countries that are in tj_countries_full 
+
+# Extract the list of country codes
+valid_country_codes <- unique(tj_countries_full$country_cod)
+
+afrobarometer_filtered <- afrobarometer_all %>%
+  mutate(country_cod = countrycode(country_name, 'country.name', 'iso3c')) %>%
+  filter(country_cod %in% valid_country_codes)
+
+arab_barometer_filtered <- arab_barometer_all %>%
+  mutate(country_cod = countrycode(country_name, 'country.name', 'iso3c')) %>%
+  filter(country_cod %in% valid_country_codes)
+
+asiabarometer_filtered <- asiabarometer_all %>%
+  mutate(country_cod = countrycode(country_name, 'country.name', 'iso3c')) %>%
+  filter(country_cod %in% valid_country_codes)
+
+lapop_filtered <- lapop %>%
+  mutate(country_cod = countrycode(country_name, 'country.name', 'iso3c')) %>%
+  filter(country_cod %in% valid_country_codes)
+
+wvs_filtered <- wvs_full %>%
+  mutate(country_cod = countrycode(country_name, 'country.name', 'iso3c')) %>%
+  filter(country_cod %in% valid_country_codes)

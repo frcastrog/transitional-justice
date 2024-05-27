@@ -4,7 +4,7 @@
 
 # 0) Load Packages
 
-pacman::p_load(ggplot2, dplyr, gridExtra)
+pacman::p_load(ggplot2, dplyr, gridExtra, panelView, tidyr)
 
 # Figure 1: Representative countries regime change
 
@@ -66,3 +66,55 @@ south_korea_plot
 polity_score_countries <- grid.arrange(argentina_plot, bangladesh_plot, ghana_plot, south_korea_plot, ncol = 2, nrow = 2)
 
 ggsave("01-outputs/polity_score_countries.png", plot = polity_score_countries, dpi = 600, width = 9, height = 5)
+
+# Figure 2: Panel view
+
+names(tj_countries_full)
+
+tj_countries_plot_data <- tj_countries_full %>%
+  # Filter out rows where e_p_polity < 0
+  filter(e_p_polity >= 0) %>%
+  mutate(
+    # Transitional justice measures
+    TJ = if_else(trial == 1 | tc == 1 | amnesty == 1 | reparation == 1 | lustration == 1, 1, 0),
+    # Post-transition without TJ measures
+    post_transition = if_else(TJ == 0, 1, 0),
+    # Post-transition with TJ measures
+    TJ_implementations = if_else(TJ == 1, 1, 0)
+  ) %>%
+  mutate(
+    country_name = case_when(
+      country_name == "Democratic Republic of the Congo" ~ "DRC",
+      country_name == "The Gambia" ~ "Gambia",
+      TRUE ~ country_name
+    ))
+
+#- Keep countries for which there's public opinion data 
+public_opinion_countries <- unique(c(
+  afrobarometer_all$country_cod,
+  arab_barometer_all$country_cod,
+  asiabarometer_all$country_cod,
+  lapop$country_cod,
+  wvs_full$country_cod
+))
+
+tj_countries_plot_data %<>%
+  filter(country_cod %in% public_opinion_countries)
+
+panel_figure <- panelview(post_transition ~ TJ_implementations, data = tj_countries_plot_data,
+                          index = c("country_name", "year"), main = "",
+                          axis.lab.gap = c(2,0), xlab="", ylab="",
+                          legend.labs = c("Partial Democracy/Democracy", "TJ Procedures", "Non-Democracy")) +
+  theme_minimal() +
+  theme(legend.title = element_blank(),
+        legend.position = c("bottom"),
+        plot.title = element_text(hjust = 0.5)) +
+  geom_tile(color = "lightgray", linewidth = 0.2)  # Adding borders to the tiles
+
+# Print the figure
+panel_figure
+
+ggsave("01-outputs/panel_figure.png", plot = panel_figure, dpi = 600, 
+       unit = "mm", width = 170, height = 210)
+
+
